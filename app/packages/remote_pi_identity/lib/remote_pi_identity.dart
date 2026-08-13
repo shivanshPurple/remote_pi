@@ -15,3 +15,4 @@ export 'src/owner_identity_store.dart'
         OwnerIdentityStore,
         PlatformFailure,
         SyncUnavailable;
+export 'src/secure_storage_store.dart' show SecureStorageOwnerIdentityStore;

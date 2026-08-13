@@ -217,7 +217,6 @@ class SpeechToTextService implements SpeechService {
         firstWhere((s) => s == 'en_US') ??
         firstWhere((s) => s.split('_').first == 'en');
   }
-
 }
 
 /// Maps the plugin's raw `onSoundLevelChange` value to the `0..1` envelope the
@@ -291,6 +290,32 @@ abstract class SttPlugin {
   Future<void> stop();
 
   Future<void> cancel();
+}
+
+/// Always-unavailable [SpeechService] for platforms without an on-device
+/// recognizer (Linux; Windows is incomplete). The mic stays hidden.
+class UnsupportedSpeechService implements SpeechService {
+  @override
+  Stream<double> get soundLevel => const Stream<double>.empty();
+
+  @override
+  Future<SpeechAvailability> init({String? preferredLocaleId}) async =>
+      const SpeechUnsupported();
+
+  @override
+  Future<void> start({
+    required String localeId,
+    required Duration maxDuration,
+  }) async {}
+
+  @override
+  Future<String> stop() async => '';
+
+  @override
+  Future<void> cancel() async {}
+
+  @override
+  void dispose() {}
 }
 
 /// Production [SttPlugin] wrapping the real `speech_to_text` plugin.

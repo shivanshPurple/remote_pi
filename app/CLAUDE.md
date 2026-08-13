@@ -1,12 +1,13 @@
 # Remote Pi — App (Flutter)
 
-Cliente mobile (iOS + Android) do Remote Pi. Pareia via QR, lista sessões do Pi,
-chat com streaming, approval cards para tool calls.
+Cliente do Remote Pi (iOS, Android, Windows, Linux). Pareia via QR no mobile
+ou colando o URI `/remote-pi pair` no desktop, lista sessões do Pi, chat com
+streaming, approval cards para tool calls.
 
 ## Stack
 
 - Flutter 3.41+ / Dart 3.11+
-- Plataformas: iOS, Android
+- Plataformas: iOS, Android, Windows, Linux
 - State management: `ChangeNotifier` + `provider` (ViewModels reativos)
 - DI: `auto_injector` (registry em `lib/config/`)
 - Roteamento: `go_router`
@@ -26,6 +27,8 @@ chat com streaming, approval cards para tool calls.
 - `flutter run` — abre em simulador/device conectado
 - `dart format .` — formata
 - `flutter build ios --no-codesign` / `flutter build apk --debug` — build verificável
+- `flutter build linux` / `flutter build windows` — desktop
+  (Linux needs `clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev libjsoncpp-dev`)
 
 ## Arquitetura por camadas
 

@@ -1,6 +1,7 @@
 // Plan/30 + tablet fix — the Camera/Gallery attach sheet must close when the
 // tablet's selected session changes out from under it.
 
+import 'package:app/config/platform.dart';
 import 'package:app/routing/adaptive.dart';
 import 'package:app/ui/chat/widgets/attach_sheet.dart';
 import 'package:flutter/material.dart';
@@ -30,12 +31,16 @@ void main() {
     // ignore: unawaited_futures
     showAttachSheet(pageContext);
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('attach-camera')), findsOneWidget);
+    // Camera is mobile-only; desktop offers the file picker only.
+    expect(
+      find.byKey(const Key('attach-camera')),
+      isDesktop ? findsNothing : findsOneWidget,
+    );
     expect(find.byKey(const Key('attach-gallery')), findsOneWidget);
 
     // Switch session on the tablet master list → sheet must dismiss.
     selection.select('e2', 'r2', 'Chat 2');
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('attach-camera')), findsNothing);
+    expect(find.byKey(const Key('attach-gallery')), findsNothing);
   });
 }

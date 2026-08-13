@@ -15,6 +15,7 @@ import 'package:app/ui/chat/widgets/message_bubble.dart';
 import 'package:app/ui/chat/widgets/streaming_bubble.dart';
 import 'package:app/ui/chat/widgets/tool_request_card.dart';
 import 'package:app/ui/chat/widgets/extension_ui_sheet.dart';
+import 'package:app/config/platform.dart';
 import 'package:app_settings/app_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -504,10 +505,12 @@ class ChatPage extends StatelessWidget {
             ),
             duration: const Duration(seconds: 5),
             behavior: SnackBarBehavior.floating,
-            action: SnackBarAction(
-              label: 'Settings',
-              onPressed: AppSettings.openAppSettings,
-            ),
+            action: isDesktop
+                ? null
+                : SnackBarAction(
+                    label: 'Settings',
+                    onPressed: AppSettings.openAppSettings,
+                  ),
           ),
         );
       case AttachHint.pickFailed:
@@ -544,10 +547,12 @@ class ChatPage extends StatelessWidget {
             ),
             duration: const Duration(seconds: 5),
             behavior: SnackBarBehavior.floating,
-            action: SnackBarAction(
-              label: 'Settings',
-              onPressed: AppSettings.openAppSettings,
-            ),
+            action: isDesktop
+                ? null
+                : SnackBarAction(
+                    label: 'Settings',
+                    onPressed: AppSettings.openAppSettings,
+                  ),
           ),
         );
     }

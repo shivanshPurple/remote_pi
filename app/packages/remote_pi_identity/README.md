@@ -46,6 +46,7 @@ plugin (or a new method-channel surface), not an upgrade path here.
 |---|---|---|---|
 | iOS | **26.0** | iCloud Keychain (`kSecAttrSynchronizable=true`) | Signed into iCloud + iCloud Keychain enabled |
 | Android | **API 34** (Android 14) | Block Store (`setShouldBackupToCloud(true)`) | Google account + Google Backup on + lock screen set |
+| Linux / Windows | — | OS keyring via `flutter_secure_storage` (local only) | A new Owner-key per machine is OK; re-pair via paste URI |
 
 On iOS the plugin uses a generic-password Keychain item; on Android it
 uses Google Play Services Block Store
@@ -107,7 +108,8 @@ abstract class OwnerIdentityStore {
 
 Concrete implementations:
 
-- `MethodChannelOwnerIdentityStore` — production, talks to iOS/Android.
+- `MethodChannelOwnerIdentityStore` — production on iOS/Android (iCloud Keychain / Block Store).
+- `SecureStorageOwnerIdentityStore` — production on desktop (OS keyring via `flutter_secure_storage`). Local-only; a new Owner-key per machine is expected.
 - `InMemoryOwnerIdentityStore` — for tests and fakes.
 
 Errors come back as a sealed `IdentityStoreError`:
@@ -142,6 +144,7 @@ remote_pi_identity/
 │       ├── owner_identity.dart    # 64-byte OwnerIdentity (pk||sk)
 │       ├── owner_identity_store.dart  # abstract interface + errors
 │       ├── method_channel_store.dart  # production impl (iOS/Android)
+│       ├── secure_storage_store.dart  # production impl (desktop keyring)
 │       └── in_memory_store.dart       # test / fake impl
 ├── ios/Classes/
 │   ├── RemotePiIdentityPlugin.swift

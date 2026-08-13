@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:app/config/platform.dart';
 import 'package:app/config/utils/injector.dart';
 import 'package:app/data/actions/actions_repository.dart';
 import 'package:app/data/mesh/mesh_client.dart';
@@ -60,10 +61,14 @@ Future<void> setupDependencies() async {
   // bootstrap before this runs).
   _injector.addInstance<LocalBoxes>(LocalBoxes());
 
-  // Plan 23 — Owner-key sync. The store talks to the native plugin
-  // (iCloud Keychain on iOS, Block Store on Android); the bridge sits
-  // between it and the rest of the app, owning boot + watch-for-reset.
-  final OwnerIdentityStore ownerStore = MethodChannelOwnerIdentityStore();
+  // Plan 23 — Owner-key sync. Mobile talks to the native plugin
+  // (iCloud Keychain on iOS, Block Store on Android). Desktop has no
+  // cloud-sync surface we own, so it persists a fresh Owner-key in the
+  // OS keyring via flutter_secure_storage. The bridge sits between the
+  // store and the rest of the app, owning boot + watch-for-reset.
+  final OwnerIdentityStore ownerStore = isDesktop
+      ? SecureStorageOwnerIdentityStore()
+      : MethodChannelOwnerIdentityStore();
   _injector.addInstance<OwnerIdentityStore>(ownerStore);
   final ownerBridge = OwnerIdentityBridge(
     ownerStore,
@@ -102,7 +107,9 @@ Future<void> setupDependencies() async {
   // sound-level stream that must survive across chat navigations; the
   // injector disposes it at app teardown. VoiceInputViewModel never
   // disposes it (it only stops/cancels sessions).
-  _injector.addService<SpeechService>(() => SpeechToTextService());
+  _injector.addService<SpeechService>(
+    () => isDesktop ? UnsupportedSpeechService() : SpeechToTextService(),
+  );
 
   // Plan 30 — image picker + on-device JPEG compression. Stateless, no
   // dispose hook needed.

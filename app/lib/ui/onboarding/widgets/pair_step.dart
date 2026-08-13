@@ -1,3 +1,4 @@
+import 'package:app/config/platform.dart';
 import 'package:app/ui/core/themes/themes.dart';
 import 'package:app/ui/pairing/states/pairing_state.dart';
 import 'package:app/ui/pairing/viewmodels/pairing_viewmodel.dart';
@@ -26,13 +27,15 @@ class PairStep extends StatefulWidget {
 }
 
 class _PairStepState extends State<PairStep> {
-  final _scanner = MobileScannerController();
+  final MobileScannerController? _scanner = isDesktop
+      ? null
+      : MobileScannerController();
   bool _scannerActive = true;
   PairingState? _lastObserved;
 
   @override
   void dispose() {
-    _scanner.dispose();
+    _scanner?.dispose();
     super.dispose();
   }
 
@@ -53,7 +56,7 @@ class _PairStepState extends State<PairStep> {
     if (!_scannerActive) return;
     _scannerActive = false;
     // ignore: unawaited_futures
-    _scanner.stop();
+    _scanner?.stop();
     vm.onQrScanned(raw);
   }
 
@@ -94,7 +97,10 @@ class _PairStepState extends State<PairStep> {
           Text(
             'On your computer (Mac, Linux, or Windows), open Pi and run:',
             style: TextStyle(
-                fontFamily: kMonoFamily, fontSize: 11, color: colors.muted),
+              fontFamily: kMonoFamily,
+              fontSize: 11,
+              color: colors.muted,
+            ),
           ),
           const SizedBox(height: 6),
           Container(
@@ -115,9 +121,14 @@ class _PairStepState extends State<PairStep> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Scan the QR code that appears:',
+            isDesktop
+                ? 'Paste the pairing URI that appears:'
+                : 'Scan the QR code that appears:',
             style: TextStyle(
-                fontFamily: kMonoFamily, fontSize: 11, color: colors.muted),
+              fontFamily: kMonoFamily,
+              fontSize: 11,
+              color: colors.muted,
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -131,8 +142,11 @@ class _PairStepState extends State<PairStep> {
           if (state is PairingScanning || state is PairingIdle)
             TextButton.icon(
               onPressed: () => _openPasteSheet(vm),
-              icon: Icon(LucideIcons.clipboardPaste,
-                  size: 16, color: colors.accent),
+              icon: Icon(
+                LucideIcons.clipboardPaste,
+                size: 16,
+                color: colors.accent,
+              ),
               label: Text(
                 "Can't scan? Paste code instead",
                 style: TextStyle(
@@ -195,10 +209,13 @@ class _PairStepState extends State<PairStep> {
 
   Widget _buildScannerBody(PairingState state, PairingViewModel vm) {
     if (state is PairingScanning) {
+      if (isDesktop) {
+        return _DesktopPasteHint(onPaste: () => _openPasteSheet(vm));
+      }
       return Stack(
         children: [
           MobileScanner(
-            controller: _scanner,
+            controller: _scanner!,
             onDetect: (capture) => _onDetect(capture, vm),
           ),
           Container(
@@ -211,10 +228,7 @@ class _PairStepState extends State<PairStep> {
       );
     }
     if (state is PairingConnecting) {
-      return _StatusOverlay(
-        icon: LucideIcons.refreshCw,
-        message: 'Pairing…',
-      );
+      return _StatusOverlay(icon: LucideIcons.refreshCw, message: 'Pairing…');
     }
     if (state is PairingError) {
       return _StatusOverlay(
@@ -224,19 +238,59 @@ class _PairStepState extends State<PairStep> {
         onAction: state.canRetry
             ? () {
                 _scannerActive = true;
-                _scanner.start();
+                _scanner?.start();
                 vm.retry();
               }
             : null,
       );
     }
     if (state is PairingPaired) {
-      return _StatusOverlay(
-        icon: LucideIcons.circleCheck,
-        message: 'Paired!',
-      );
+      return _StatusOverlay(icon: LucideIcons.circleCheck, message: 'Paired!');
     }
     return const SizedBox.shrink();
+  }
+}
+
+class _DesktopPasteHint extends StatelessWidget {
+  final VoidCallback onPaste;
+  const _DesktopPasteHint({required this.onPaste});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      color: colors.bg,
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(LucideIcons.clipboardPaste, color: colors.accent, size: 36),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Text(
+              'Paste the remotepi://pair?… URI from the host terminal.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: kMonoFamily,
+                fontSize: 12,
+                color: colors.text,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onPaste,
+            icon: const Icon(LucideIcons.clipboardPaste, size: 16),
+            label: const Text('Paste pairing code'),
+            style: FilledButton.styleFrom(
+              backgroundColor: colors.accent,
+              foregroundColor: colors.onAccent,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -269,7 +323,10 @@ class _StatusOverlay extends StatelessWidget {
                 message,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                    fontFamily: kMonoFamily, fontSize: 12, color: colors.text),
+                  fontFamily: kMonoFamily,
+                  fontSize: 12,
+                  color: colors.text,
+                ),
               ),
             ),
             if (actionLabel != null && onAction != null) ...[
@@ -282,8 +339,7 @@ class _StatusOverlay extends StatelessWidget {
                 ),
                 child: Text(
                   actionLabel!,
-                  style:
-                      TextStyle(fontFamily: kMonoFamily, fontSize: 12),
+                  style: TextStyle(fontFamily: kMonoFamily, fontSize: 12),
                 ),
               ),
             ],

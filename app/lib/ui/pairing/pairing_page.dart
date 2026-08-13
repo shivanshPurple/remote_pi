@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app/config/platform.dart';
 import 'package:app/ui/core/themes/themes.dart';
 import 'package:app/ui/pairing/states/pairing_state.dart';
 import 'package:app/ui/pairing/viewmodels/pairing_viewmodel.dart';
@@ -23,7 +24,11 @@ class PairingPage extends StatefulWidget {
 }
 
 class _PairingPageState extends State<PairingPage> {
-  final _scanner = MobileScannerController();
+  // Camera scanner is mobile-only (`mobile_scanner` has no Linux /
+  // Windows impl). Desktop pairs exclusively via the paste URI.
+  final MobileScannerController? _scanner = isDesktop
+      ? null
+      : MobileScannerController();
   bool _scannerActive = true;
   // Guards against [_runPostPairFlow] firing twice — `PairingPaired`
   // is rebroadcast on every `applyNickname` emit, and we only want to
@@ -32,7 +37,7 @@ class _PairingPageState extends State<PairingPage> {
 
   @override
   void dispose() {
-    _scanner.dispose();
+    _scanner?.dispose();
     super.dispose();
   }
 
@@ -49,7 +54,7 @@ class _PairingPageState extends State<PairingPage> {
   void _submitRaw(String raw) {
     if (!_scannerActive) return;
     setState(() => _scannerActive = false);
-    _scanner.stop();
+    _scanner?.stop();
     context.read<PairingViewModel>().onQrScanned(raw);
   }
 
@@ -111,13 +116,15 @@ class _PairingPageState extends State<PairingPage> {
         onRetry: () {
           vm.retry();
           setState(() => _scannerActive = true);
-          _scanner.start();
+          _scanner?.start();
         },
       ),
     };
   }
 
   Widget _buildScannerBody(PairingState state) {
+    if (isDesktop) return _buildDesktopPasteBody(state);
+
     final colors = context.colors;
     final isConnecting = state is PairingConnecting;
     final sessionName = isConnecting ? state.sessionName : null;
@@ -125,7 +132,7 @@ class _PairingPageState extends State<PairingPage> {
     return Stack(
       children: [
         if (!isConnecting)
-          MobileScanner(controller: _scanner, onDetect: _onDetect),
+          MobileScanner(controller: _scanner!, onDetect: _onDetect),
         Center(
           child: Container(
             width: 268,
@@ -136,10 +143,7 @@ class _PairingPageState extends State<PairingPage> {
               border: Border.all(color: colors.border),
             ),
             child: isConnecting
-                ? Center(
-                    child:
-                        CircularProgressIndicator(color: colors.accent),
-                  )
+                ? Center(child: CircularProgressIndicator(color: colors.accent))
                 : _CornerBrackets(),
           ),
         ),
@@ -163,8 +167,11 @@ class _PairingPageState extends State<PairingPage> {
             right: 32,
             child: OutlinedButton.icon(
               onPressed: _openPasteSheet,
-              icon: Icon(LucideIcons.clipboardPaste,
-                  size: 16, color: colors.accent),
+              icon: Icon(
+                LucideIcons.clipboardPaste,
+                size: 16,
+                color: colors.accent,
+              ),
               label: Text(
                 "Can't scan? Paste code instead",
                 style: TextStyle(
@@ -184,6 +191,75 @@ class _PairingPageState extends State<PairingPage> {
             ),
           ),
       ],
+    );
+  }
+
+  /// Desktop pairing — no camera. The Pi host prints a
+  /// `remotepi://pair?…` URI next to the QR; the user pastes it here.
+  Widget _buildDesktopPasteBody(PairingState state) {
+    final colors = context.colors;
+    final isConnecting = state is PairingConnecting;
+    final sessionName = isConnecting ? state.sessionName : null;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(LucideIcons.clipboardPaste, color: colors.accent, size: 40),
+              const SizedBox(height: 16),
+              Text(
+                isConnecting
+                    ? 'Connecting to $sessionName…'
+                    : 'Paste the pairing code',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: kMonoFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: colors.text,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isConnecting
+                    ? 'Talking to the Pi host…'
+                    : 'On the host, run /remote-pi pair and paste the '
+                          'remotepi://pair?… URI printed in the terminal.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: kMonoFamily,
+                  fontSize: 12,
+                  color: colors.muted2,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 24),
+              if (isConnecting)
+                CircularProgressIndicator(color: colors.accent)
+              else
+                FilledButton.icon(
+                  onPressed: _openPasteSheet,
+                  icon: const Icon(LucideIcons.clipboardPaste, size: 16),
+                  label: const Text('Paste pairing code'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colors.accent,
+                    foregroundColor: colors.onAccent,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(8)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -268,11 +344,7 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              LucideIcons.circleAlert,
-              color: colors.error,
-              size: 48,
-            ),
+            Icon(LucideIcons.circleAlert, color: colors.error, size: 48),
             const SizedBox(height: 16),
             Text(
               message,

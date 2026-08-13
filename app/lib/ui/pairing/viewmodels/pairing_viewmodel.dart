@@ -144,9 +144,12 @@ class PairingViewModel extends ViewModel<PairingState> {
     try {
       if (Platform.isIOS) return 'iPhone';
       if (Platform.isAndroid) return 'Android device';
-      return 'Mobile';
+      if (Platform.isWindows) return 'Windows';
+      if (Platform.isLinux) return 'Linux';
+      if (Platform.isMacOS) return 'macOS';
+      return 'Desktop';
     } catch (_) {
-      return 'Mobile';
+      return 'Desktop';
     }
   }
 }

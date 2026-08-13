@@ -2,7 +2,7 @@ name: remote_pi_identity
 description: >-
   Owner-key Ed25519 identity synced across devices of the same human via
   platform-native key sync (iCloud Keychain on iOS, Block Store on Android).
-version: 0.2.0
+version: 0.2.1
 publish_to: none
 
 environment:
@@ -12,6 +12,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_secure_storage: ^9.0.0
 
 dev_dependencies:
   flutter_test:

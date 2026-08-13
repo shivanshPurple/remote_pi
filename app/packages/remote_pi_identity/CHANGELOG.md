@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- `SecureStorageOwnerIdentityStore` — desktop persistence via the OS
+  keyring (`flutter_secure_storage`). Local-only; does not replace the
+  iOS / Android method-channel implementations.
+
 ## 0.2.0
 
 ### BREAKING
