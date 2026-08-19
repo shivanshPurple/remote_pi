@@ -1,1 +1,0 @@
-{"type":"agent_message","in_reply_to":"018f9c2a-7b1e-7000-9a3b-1c2d3e4f5a6e","text":"O token expira em 1h por segurança. Veja `auth/middleware.ts:42`.","usage":{"input_tokens":120,"output_tokens":340}}

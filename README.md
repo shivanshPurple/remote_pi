@@ -48,8 +48,6 @@ This fork expands on that for developers running Pi on **remote VMs, cloud insta
 | [`app/`](./app) | Flutter (Windows / Linux / Android / iOS) | High-performance multiplatform client |
 | [`pi-extension/`](./pi-extension) | Node + TypeScript | Pi extension exposing `/remote-pi` & relay connector |
 | [`relay/`](./relay) | Rust + Tokio | Fast WebSocket routing & mesh state broker |
-| [`cockpit/`](./cockpit) | Flutter (Desktop Cockpit) | Desktop power-user management interface |
-| [`site/`](./site) | Next.js | Landing page & documentation |
 
 ---
 

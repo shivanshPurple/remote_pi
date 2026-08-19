@@ -1,1 +1,0 @@
-{"type":"tool_request","tool_call_id":"tc_018f9c2b","tool":"Bash","args":{"command":"rm -rf node_modules"}}

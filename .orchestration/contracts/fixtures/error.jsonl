@@ -1,3 +1,0 @@
-{"type":"error","in_reply_to":"018f9c2a-7b1e-7000-9a3b-1c2d3e4f5a6e","code":"tool_approval_required","message":"tool_call tc_018f9c2b ainda aguarda approve_tool"}
-{"type":"error","code":"invalid_message","message":"missing required field 'id' in user_message"}
-{"type":"error","code":"too_large","message":"ct payload exceeds 1 MiB limit"}
