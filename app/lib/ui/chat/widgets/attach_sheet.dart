@@ -7,9 +7,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
 
 /// Plan/30 — which source the user picked from the attach sheet (#2).
-enum AttachSource { camera, gallery }
+enum AttachSource { camera, gallery, clipboard }
 
-/// Bottom sheet offering Camera / Gallery (decision #2, interpreted as an
+/// Bottom sheet offering Camera / Gallery / Clipboard (decision #2, interpreted as an
 /// action sheet to match the quick-actions sheet idiom). Returns the chosen
 /// [AttachSource], or null if dismissed. Pure UI — the caller drives the
 /// picker ViewModel with the result.
@@ -67,6 +67,12 @@ class _AttachSheetBody extends StatelessWidget {
               icon: LucideIcons.image,
               label: 'Photo Library',
               onTap: () => Navigator.of(context).pop(AttachSource.gallery),
+            ),
+            _AttachOption(
+              key: const Key('attach-clipboard'),
+              icon: LucideIcons.clipboard,
+              label: 'Paste from Clipboard',
+              onTap: () => Navigator.of(context).pop(AttachSource.clipboard),
             ),
           ],
         ),

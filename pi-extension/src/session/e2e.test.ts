@@ -87,6 +87,9 @@ function capturingRemoteRouter(): {
 async function flushUds(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
   await new Promise<void>((resolve) => setImmediate(resolve));
+  if (process.platform === "win32") {
+    await wait(10);
+  }
 }
 
 function observe<T>(promise: Promise<T>): Promise<

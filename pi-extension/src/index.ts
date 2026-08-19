@@ -67,6 +67,7 @@ import type {
   ThinkingLevel,
   WireImage,
   QueuedMessageItem,
+  Usage,
 } from "./protocol/types.js";
 import { RelayClient, RoomAlreadyOpenError } from "./transport/relay_client.js";
 import { PlainPeerChannel } from "./transport/peer_channel.js";
@@ -846,6 +847,7 @@ type BufferMsg = {
   tokensBefore?: number;
 };
 let _messageBuffer: BufferMsg[] = [];
+let _lastTurnUsage: Usage | null = null;
 type PendingSteer = { id: string; text: string };
 let _pendingSteers: PendingSteer[] = [];
 let _lastConsumedSteerText: string | null = null;
@@ -1422,6 +1424,7 @@ function _goIdle(byeReason?: import("./protocol/types.js").ByeReason): void {
   _pendingReceivedImagePreviews.length = 0;
   _pendingSteers = [];
   _lastConsumedSteerText = null;
+  _lastTurnUsage = null;
   _resetQueuedItems();
 
   // Invalidate async producers and bridge ownership before closing the host
@@ -2223,10 +2226,31 @@ const extension: ExtensionFactory = (pi: ExtensionAPI): void => {
   // or RPC. Previous impl overwrote on `agent_end` and lost everything but the
   // last turn (see diagnostics 14, 15).
   pi.on("message_end", (event) => {
-    const m = event?.message as { role?: string; content?: unknown; stopReason?: string; errorMessage?: string } | undefined;
+    const m = event?.message as {
+      role?: string;
+      content?: unknown;
+      stopReason?: string;
+      errorMessage?: string;
+      usage?: {
+        input?: number;
+        output?: number;
+        cacheRead?: number;
+        cacheWrite?: number;
+        totalTokens?: number;
+      };
+    } | undefined;
     if (!m) return;
     if (m.role === "user" && _anyPeerActive()) {
       _broadcastConsumedSteerForUserContent(m.content);
+    }
+    if (m.role === "assistant" && m.usage) {
+      const u = m.usage;
+      const promptTokens = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
+      const completionTokens = u.output ?? 0;
+      _lastTurnUsage = {
+        input_tokens: promptTokens,
+        output_tokens: completionTokens,
+      };
     }
     if (m.role === "user" || m.role === "assistant" || m.role === "toolResult") {
       _messageBuffer.push(m as unknown as BufferMsg);
@@ -2248,11 +2272,67 @@ const extension: ExtensionFactory = (pi: ExtensionAPI): void => {
     }
   });
 
-  pi.on("agent_end", () => {
+  function _computeEffectiveContextUsage(ctx?: ExtensionContext): Usage | null {
+    try {
+      const off = ctx?.getContextUsage?.();
+      if (off && typeof off.tokens === "number" && off.tokens > 0) {
+        const out = _lastTurnUsage?.output_tokens ?? 0;
+        return {
+          input_tokens: Math.max(0, off.tokens - out),
+          output_tokens: out,
+        };
+      }
+    } catch { /* defensive */ }
+
+    try {
+      const sm = ctx?.sessionManager as { getBranch?: () => Array<{ type?: string; message?: { role?: string; usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } } }> } | undefined;
+      if (sm && typeof sm.getBranch === "function") {
+        const branch = sm.getBranch();
+        for (let i = branch.length - 1; i >= 0; i--) {
+          const entry = branch[i];
+          if (entry.type === "message" && entry.message?.role === "assistant" && entry.message.usage) {
+            const u = entry.message.usage;
+            const promptTokens = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
+            const completionTokens = u.output ?? 0;
+            if (promptTokens + completionTokens > 0) {
+              return {
+                input_tokens: promptTokens,
+                output_tokens: completionTokens,
+              };
+            }
+          }
+        }
+      }
+    } catch { /* defensive */ }
+
+    for (let i = _messageBuffer.length - 1; i >= 0; i--) {
+      const m = _messageBuffer[i];
+      if (m.role === "assistant" && m.usage) {
+        const u = m.usage as { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; input_tokens?: number; output_tokens?: number } | undefined;
+        const promptTokens = (u?.input ?? u?.input_tokens ?? 0) + (u?.cacheRead ?? 0) + (u?.cacheWrite ?? 0);
+        const completionTokens = u?.output ?? u?.output_tokens ?? 0;
+        if (promptTokens + completionTokens > 0) {
+          return {
+            input_tokens: promptTokens,
+            output_tokens: completionTokens,
+          };
+        }
+      }
+    }
+
+    return _lastTurnUsage;
+  }
+
+  pi.on("agent_end", (_event, ctx) => {
     // Buffer is fed by `message_end`; here we only finalize the outbound
     // turn signal to every connected owner. No buffer mutation.
     if (_anyPeerActive() && _currentTurnId) {
-      _broadcastToActive({ type: "agent_done", in_reply_to: _currentTurnId });
+      const usageToSend = _computeEffectiveContextUsage(ctx);
+      _broadcastToActive({
+        type: "agent_done",
+        in_reply_to: _currentTurnId,
+        ...(usageToSend ? { usage: usageToSend } : {}),
+      });
       _currentTurnId = null;
     }
     _flushPendingReceivedImagePreviews();
@@ -2277,6 +2357,7 @@ const extension: ExtensionFactory = (pi: ExtensionAPI): void => {
   // room_meta over the relay (plan/32) below — that's independent of the
   // broker and drives the app's working indicator.
   pi.on("turn_start", (_event, ctx) => {
+    _lastTurnUsage = null;
     // Late model hydration: if the model was still unknown at connect (resolved
     // lazily by the SDK), grab it on the first turn and fan it out — so a daemon
     // whose model only materialises at turn 1 still reports it to the app.
@@ -4655,7 +4736,40 @@ function _handleSessionSync(
   const requested = msg.limit ?? serverLimit;
   const effectiveLimit = Math.min(requested, serverLimit);  // server clamps
 
-  const allEvents = _mapAgentMessagesToEvents(_messageBuffer);
+  let bufferToMap = _messageBuffer;
+  const lastCtx = _lastEventCtx as Partial<ExtensionContext> | undefined;
+  if (bufferToMap.length === 0 && lastCtx?.sessionManager) {
+    try {
+      const sm = lastCtx.sessionManager as unknown as { getBranch?: () => Array<{ type?: string; message?: { role?: string; content?: unknown; usage?: unknown }; summary?: string; timestamp?: number | string; tokensBefore?: number }> };
+      if (typeof sm.getBranch === "function") {
+        const branch = sm.getBranch();
+        const extracted: BufferMsg[] = [];
+        for (const entry of branch) {
+          if (entry.type === "message" && entry.message) {
+            extracted.push(entry.message as unknown as BufferMsg);
+          } else if (entry.type === "compaction") {
+            const ts = typeof entry.timestamp === "number"
+              ? entry.timestamp
+              : typeof entry.timestamp === "string"
+                ? new Date(entry.timestamp).getTime()
+                : Date.now();
+            extracted.push({
+              role: "compaction",
+              content: entry.summary ?? "",
+              timestamp: ts,
+              tokensBefore: entry.tokensBefore ?? 0,
+            });
+          }
+        }
+        if (extracted.length > 0) {
+          _messageBuffer = extracted;
+          bufferToMap = extracted;
+        }
+      }
+    } catch { /* defensive */ }
+  }
+
+  const allEvents = _mapAgentMessagesToEvents(bufferToMap);
   const slice = effectiveLimit > 0 ? allEvents.slice(-effectiveLimit) : [];
   const truncated = allEvents.length > effectiveLimit;
 
@@ -4957,8 +5071,18 @@ export function _mapAgentMessagesToEvents(
       events.push(ev);
     } else if (m.role === "assistant") {
       const content = Array.isArray(m.content) ? m.content : [];
-      const usage = m.usage
-        ? { input_tokens: m.usage.input ?? 0, output_tokens: m.usage.output ?? 0 }
+      const u = m.usage as {
+        input?: number;
+        output?: number;
+        cacheRead?: number;
+        cacheWrite?: number;
+        totalTokens?: number;
+      } | undefined;
+      const usage = u
+        ? {
+            input_tokens: (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0),
+            output_tokens: u.output ?? 0,
+          }
         : undefined;
       for (const raw of content) {
         if (!raw || typeof raw !== "object") continue;
@@ -4981,6 +5105,7 @@ export function _mapAgentMessagesToEvents(
             tool_call_id: String(block.id ?? ""),
             tool: String(block.name ?? ""),
             args: (block.arguments as Record<string, unknown>) ?? {},
+            ...(usage ? { usage } : {}),
           });
         }
       }

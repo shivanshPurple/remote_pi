@@ -213,3 +213,55 @@ class StreamingMessage {
   @override
   int get hashCode => Object.hash(inReplyTo, buffer);
 }
+
+// ---------------------------------------------------------------------------
+// ContextUsage — real-time token tracking vs model context window
+// ---------------------------------------------------------------------------
+
+class ContextUsage {
+  final int inputTokens;
+  final int outputTokens;
+  final int usedTokens;
+  final int totalTokens;
+  final double percentage;
+
+  const ContextUsage({
+    this.inputTokens = 0,
+    this.outputTokens = 0,
+    required this.usedTokens,
+    required this.totalTokens,
+    required this.percentage,
+  });
+
+  String get formattedPercentage =>
+      '${percentage.toStringAsFixed(percentage < 10 ? 1 : 0)}%';
+  String get formattedUsed => formatTokenCount(usedTokens);
+  String get formattedTotal => formatTokenCount(totalTokens);
+  String get formattedShort =>
+      '$formattedPercentage ($formattedUsed / $formattedTotal)';
+
+  static String formatTokenCount(int tokens) {
+    if (tokens >= 1000000) {
+      final m = tokens / 1000000;
+      return m == m.toInt() ? '${m.toInt()}M' : '${m.toStringAsFixed(1)}M';
+    }
+    if (tokens >= 1000) {
+      final k = tokens / 1000;
+      return k == k.toInt() ? '${k.toInt()}k' : '${k.toStringAsFixed(1)}k';
+    }
+    return tokens.toString();
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContextUsage &&
+      other.inputTokens == inputTokens &&
+      other.outputTokens == outputTokens &&
+      other.usedTokens == usedTokens &&
+      other.totalTokens == totalTokens &&
+      (other.percentage - percentage).abs() < 0.0001;
+
+  @override
+  int get hashCode =>
+      Object.hash(inputTokens, outputTokens, usedTokens, totalTokens, percentage);
+}

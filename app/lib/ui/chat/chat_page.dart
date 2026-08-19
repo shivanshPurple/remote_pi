@@ -18,6 +18,7 @@ import 'package:app/ui/chat/widgets/extension_ui_sheet.dart';
 import 'package:app/config/platform.dart';
 import 'package:app_settings/app_settings.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:provider/provider.dart';
@@ -240,6 +241,22 @@ class ChatPage extends StatelessWidget {
               ],
             ),
           ),
+          if (state is ChatReady && state.contextUsage != null)
+            _ContextBadge(
+              usage: state.contextUsage!,
+              onTap: () {
+                final p = vm.activePeer;
+                if (p != null) {
+                  _showSessionInfo(
+                    context,
+                    p,
+                    vm.activeRoom,
+                    roomName,
+                    state.contextUsage,
+                  );
+                }
+              },
+            ),
           // Plan/32g follow-up: ALWAYS render the info button. Gating it on the
           // async PeerRecord made it pop in on load → an AppBar layout shift
           // (the flicker the user saw). Title + device already render from the
@@ -252,7 +269,13 @@ class ChatPage extends StatelessWidget {
             onPressed: () {
               final p = vm.activePeer;
               if (p != null) {
-                _showSessionInfo(context, p, vm.activeRoom, roomName);
+                _showSessionInfo(
+                  context,
+                  p,
+                  vm.activeRoom,
+                  roomName,
+                  state is ChatReady ? state.contextUsage : null,
+                );
               }
             },
           ),
@@ -268,8 +291,9 @@ class ChatPage extends StatelessWidget {
     BuildContext context,
     PeerRecord peer,
     RoomInfo? room,
-    String name,
-  ) {
+    String name, [
+    ContextUsage? contextUsage,
+  ]) {
     final owner = (peer.nickname?.isNotEmpty ?? false)
         ? peer.nickname!
         : peer.sessionName.isNotEmpty
@@ -283,6 +307,7 @@ class ChatPage extends StatelessWidget {
       context: context,
       builder: (dCtx) {
         final colors = dCtx.colors;
+        final usage = contextUsage;
         return AlertDialog(
           backgroundColor: colors.bg,
           shape: RoundedRectangleBorder(
@@ -297,18 +322,70 @@ class ChatPage extends StatelessWidget {
               color: colors.text,
             ),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _InfoRow(label: 'Name', value: name),
-              _InfoRow(label: 'Path', value: room?.cwd ?? '—'),
-              _InfoRow(label: 'Owner', value: owner),
-              if (model != null && model.isNotEmpty)
-                _InfoRow(label: 'Model', value: model),
-              _InfoRow(label: 'Room', value: room?.roomId ?? '—'),
-              _InfoRow(label: 'Paired', value: paired),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _InfoRow(label: 'Name', value: name),
+                _InfoRow(label: 'Path', value: room?.cwd ?? '—'),
+                _InfoRow(label: 'Owner', value: owner),
+                if (model != null && model.isNotEmpty)
+                  _InfoRow(label: 'Model', value: model),
+                if (usage != null && usage.totalTokens > 0) ...[
+                  _InfoRow(
+                    label: 'Context Window',
+                    value:
+                        '${usage.formattedPercentage} (${usage.formattedUsed} / ${usage.formattedTotal})',
+                  ),
+                  _InfoRow(
+                    label: 'Tokens Used',
+                    value: '${usage.usedTokens} tokens',
+                  ),
+                  if (usage.inputTokens > 0)
+                    _InfoRow(
+                      label: 'Prompt / Cache',
+                      value: '${usage.inputTokens} tokens',
+                    ),
+                  if (usage.outputTokens > 0)
+                    _InfoRow(
+                      label: 'Completion',
+                      value: '${usage.outputTokens} tokens',
+                    ),
+                  _InfoRow(
+                    label: 'Model Limit',
+                    value: '${usage.totalTokens} tokens',
+                  ),
+                  const SizedBox(height: 2),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: (usage.percentage / 100).clamp(0.0, 1.0),
+                      minHeight: 4,
+                      backgroundColor: colors.border,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        usage.percentage >= 85
+                            ? colors.error
+                            : usage.percentage >= 70
+                                ? colors.warning
+                                : colors.accent,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                ],
+                _InfoRow(label: 'Room', value: room?.roomId ?? '—'),
+                _InfoRow(label: 'Paired', value: paired),
+                const SizedBox(height: 6),
+                _CommandRow(
+                  label: 'Resume in Terminal / VM',
+                  command: (room?.cwd != null && room!.cwd!.isNotEmpty && room.cwd != '—')
+                      ? 'cd "${room.cwd}" && pi -c'
+                      : 'pi -c',
+                  hint: 'Run in terminal or VM to open this chat directly in Pi CLI ("pi -c" to continue, "pi -r" to pick)',
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -485,6 +562,8 @@ class ChatPage extends StatelessWidget {
         await vm.pickFromCamera();
       case AttachSource.gallery:
         await vm.pickFromGallery();
+      case AttachSource.clipboard:
+        await vm.pasteFromClipboard();
     }
     await Future<void>.delayed(Duration.zero); // flush the hint microtask
     await sub.cancel();
@@ -737,6 +816,172 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CommandRow extends StatefulWidget {
+  final String label;
+  final String command;
+  final String? hint;
+
+  const _CommandRow({
+    required this.label,
+    required this.command,
+    this.hint,
+  });
+
+  @override
+  State<_CommandRow> createState() => _CommandRowState();
+}
+
+class _CommandRowState extends State<_CommandRow> {
+  bool _copied = false;
+
+  Future<void> _copy(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: widget.command));
+    if (!mounted) return;
+    setState(() => _copied = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Copied: ${widget.command}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.label.toUpperCase(),
+            style: TextStyle(
+              fontFamily: kMonoFamily,
+              fontSize: 10,
+              color: colors.muted,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: colors.border),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    widget.command,
+                    style: TextStyle(
+                      fontFamily: kMonoFamily,
+                      fontSize: 12,
+                      color: colors.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => _copy(context),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      _copied ? LucideIcons.check : LucideIcons.copy,
+                      size: 16,
+                      color: _copied ? colors.accent : colors.muted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (widget.hint != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              widget.hint!,
+              style: TextStyle(
+                fontFamily: kMonoFamily,
+                fontSize: 10,
+                color: colors.muted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ContextBadge extends StatelessWidget {
+  final ContextUsage usage;
+  final VoidCallback onTap;
+
+  const _ContextBadge({
+    required this.usage,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final pct = usage.percentage;
+    final badgeColor = pct >= 85
+        ? colors.error
+        : pct >= 70
+            ? colors.warning
+            : colors.accent;
+
+    return Tooltip(
+      message:
+          'Context Window: ${usage.formattedUsed} / ${usage.formattedTotal} tokens (${usage.formattedPercentage})',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: colors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: badgeColor,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                usage.formattedShort,
+                style: TextStyle(
+                  fontFamily: kMonoFamily,
+                  fontSize: 10,
+                  color: colors.text,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

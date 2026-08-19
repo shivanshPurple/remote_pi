@@ -56,6 +56,9 @@ class ChatReady extends ChatState {
   /// dead end when pi-ask rejects an answer.
   final String? pendingUiError;
 
+  /// Real-time context window usage (used tokens, limit, percentage).
+  final ContextUsage? contextUsage;
+
   String? get queuedText =>
       queuedMessages.isEmpty ? null : queuedMessages.first.text;
 
@@ -70,6 +73,7 @@ class ChatReady extends ChatState {
     this.queuedMessages = const [],
     this.pendingUiRequest,
     this.pendingUiError,
+    this.contextUsage,
   });
 
   ChatReady copyWith({
@@ -88,6 +92,8 @@ class ChatReady extends ChatState {
     bool clearPendingUiRequest = false,
     String? pendingUiError,
     bool clearPendingUiError = false,
+    ContextUsage? contextUsage,
+    bool clearContextUsage = false,
   }) =>
       ChatReady(
         messages: messages ?? this.messages,
@@ -108,6 +114,9 @@ class ChatReady extends ChatState {
         pendingUiError: clearPendingUiError
             ? null
             : (pendingUiError ?? this.pendingUiError),
+        contextUsage: clearContextUsage
+            ? null
+            : (contextUsage ?? this.contextUsage),
       );
 
   @override
@@ -122,7 +131,8 @@ class ChatReady extends ChatState {
       other.isWorking == isWorking &&
       other.queuedMessages == queuedMessages &&
       other.pendingUiRequest == pendingUiRequest &&
-      other.pendingUiError == pendingUiError;
+      other.pendingUiError == pendingUiError &&
+      other.contextUsage == contextUsage;
 
   @override
   int get hashCode => Object.hash(
@@ -136,6 +146,7 @@ class ChatReady extends ChatState {
         queuedMessages,
         pendingUiRequest,
         pendingUiError,
+        contextUsage,
       );
 }
 

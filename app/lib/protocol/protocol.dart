@@ -1171,6 +1171,9 @@ sealed class SessionHistoryEvent {
         toolCallId: j['tool_call_id'] as String,
         tool: j['tool'] as String,
         args: j['args'],
+        usage: j['usage'] is Map<String, dynamic>
+            ? Usage.fromJson(j['usage'] as Map<String, dynamic>)
+            : null,
       ),
       'tool_result' => ToolResultEvt(
         ts: ts,
@@ -1182,6 +1185,9 @@ sealed class SessionHistoryEvent {
         ts: ts,
         inReplyTo: j['in_reply_to'] as String,
         text: j['text'] as String,
+        usage: j['usage'] is Map<String, dynamic>
+            ? Usage.fromJson(j['usage'] as Map<String, dynamic>)
+            : null,
       ),
       // Plan/32 — compaction replayed from history so the system bubble
       // survives a re-sync.
@@ -1215,11 +1221,13 @@ class ToolRequestEvt extends SessionHistoryEvent {
   final String toolCallId;
   final String tool;
   final dynamic args;
+  final Usage? usage;
   const ToolRequestEvt({
     required super.ts,
     required this.toolCallId,
     required this.tool,
     required this.args,
+    this.usage,
   });
 }
 
@@ -1238,10 +1246,12 @@ class ToolResultEvt extends SessionHistoryEvent {
 class AgentMessageEvt extends SessionHistoryEvent {
   final String inReplyTo;
   final String text;
+  final Usage? usage;
   const AgentMessageEvt({
     required super.ts,
     required this.inReplyTo,
     required this.text,
+    this.usage,
   });
 }
 

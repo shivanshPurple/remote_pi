@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:app/config/dependencies.dart';
 import 'package:app/data/local/boxes.dart';
 import 'package:app/data/mesh/mesh_sync_service.dart';
@@ -12,16 +15,48 @@ import 'package:app/ui/core/themes/themes.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+void _log(String line) {
+  try {
+    final f = File(r'C:\Users\Purple\AppData\Local\Temp\remote_pi_dart.log');
+    f.writeAsStringSync('[$DateTime.now()] $line\n', mode: FileMode.append);
+  } catch (_) {}
+}
+
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  // Plan 31 — open the v2 SSOT boxes + WIPE the volatile runtime box BEFORE
-  // anything subscribes (#3 / Risk 2).
-  await LocalBoxes.init();
-  await setupDependencies();
-  // Eagerly construct the SSOT writer so it's consuming the channel from boot
-  // (messages can arrive before the chat screen mounts).
-  injector.get<SyncService>();
-  runApp(const RemotePiApp());
+  _log('Dart main() started');
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    _log('WidgetsFlutterBinding initialized');
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      _log('[FlutterError] ${details.exception}\n${details.stack}');
+    };
+    try {
+      _log('Initializing LocalBoxes');
+      await LocalBoxes.init();
+      _log('LocalBoxes initialized, running setupDependencies');
+      await setupDependencies();
+      _log('setupDependencies done, getting SyncService');
+      injector.get<SyncService>();
+      _log('Calling runApp(RemotePiApp)');
+      runApp(const RemotePiApp());
+      _log('runApp returned');
+    } catch (e, st) {
+      _log('[StartupError] $e\n$st');
+      runApp(MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Text('Fatal Startup Error:\n$e\n\n$st'),
+            ),
+          ),
+        ),
+      ));
+    }
+  }, (error, stack) {
+    _log('[ZoneError] $error\n$stack');
+  });
 }
 
 class RemotePiApp extends StatefulWidget {

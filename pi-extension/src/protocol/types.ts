@@ -241,6 +241,7 @@ export type SessionHistoryEvent =
       tool_call_id: string;
       tool: string;
       args: Record<string, unknown>;
+      usage?: Usage;
     }
   | {
       ts: number;

@@ -15,6 +15,10 @@ class _FakeBackend implements ImagePickerBackend {
   final List<({int side, int quality})> calls = [];
   ImageSourceKind? pickedSource;
 
+  Uint8List? clipboardBytes = Uint8List.fromList([
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+  ]);
+
   @override
   Future<String?> pick(ImageSourceKind source) async {
     pickedSource = source;
@@ -25,6 +29,21 @@ class _FakeBackend implements ImagePickerBackend {
   @override
   Future<Uint8List> compress(
     String path, {
+    required int maxSide,
+    required int quality,
+  }) async {
+    calls.add((side: maxSide, quality: quality));
+    final idx = calls.length - 1;
+    final n = idx < sizes.length ? sizes[idx] : sizes.last;
+    return Uint8List(n);
+  }
+
+  @override
+  Future<Uint8List?> pasteFromClipboard() async => clipboardBytes;
+
+  @override
+  Future<Uint8List> compressBytes(
+    Uint8List bytes, {
     required int maxSide,
     required int quality,
   }) async {
@@ -79,5 +98,21 @@ void main() {
       () => svc.pickFromCamera(),
       throwsA(isA<ImagePermissionDeniedException>()),
     );
+  });
+
+  test('pasteFromClipboard compresses and returns PickedImage', () async {
+    final backend = _FakeBackend()..sizes = [150 * 1024];
+    final svc = ImagePickerService(backend);
+    final result = await svc.pasteFromClipboard();
+    expect(result, isNotNull);
+    expect(result!.mime, 'image/jpeg');
+    expect(result.bytes.length, 150 * 1024);
+  });
+
+  test('pasteFromClipboard returns null when clipboard is empty', () async {
+    final backend = _FakeBackend()..clipboardBytes = null;
+    final svc = ImagePickerService(backend);
+    final result = await svc.pasteFromClipboard();
+    expect(result, isNull);
   });
 }

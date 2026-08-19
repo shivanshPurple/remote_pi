@@ -21,7 +21,7 @@ function tmpCwd(): string {
 let testHome: string;
 
 beforeEach(() => {
-  testHome = mkdtempSync("/tmp/rp-cwdlock-");
+  testHome = mkdtempSync(join(tmpdir(), "rp-cwdlock-"));
   process.env["REMOTE_PI_HOME"] = testHome;
 });
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app/data/actions/actions_repository.dart';
 import 'package:app/data/local/records/message_record.dart';
 import 'package:app/data/local/records/runtime_record.dart';
 import 'package:app/data/preferences/preferences.dart';
@@ -26,6 +27,7 @@ class ChatViewModel extends ViewModel<ChatState> {
   final ConnectionManager _conn;
   final Preferences _prefs;
   final PairingStorage _storage;
+  final IActionsRepository? _actions;
 
   StreamSubscription<List<MessageRecord>>? _msgsSub;
   StreamSubscription<RuntimeRecord>? _runtimeSub;
@@ -36,6 +38,8 @@ class ChatViewModel extends ViewModel<ChatState> {
   StreamSubscription<ExtensionUiRequest>? _uiReqSub;
   StreamSubscription<Map<String, List<RoomInfo>>>? _roomsSub;
   StreamSubscription<ConnectionStatus>? _statusSub;
+  StreamSubscription<Usage?>? _usageSub;
+  StreamSubscription<ActiveRoomMeta>? _metaSub;
 
   PeerRecord? _activePeer;
   String _activeRoomId = 'main';
@@ -46,6 +50,8 @@ class ChatViewModel extends ViewModel<ChatState> {
   StreamingMessage? _streaming;
   bool _working = false;
   List<QueuedMsg> _queuedMessages = const [];
+  Usage? _usage;
+  ModelsCatalogue? _modelsCatalogue;
   // Plan/57 — interactive extension_ui_request awaiting an answer (ask_user).
   ExtensionUiRequest? _pendingUiRequest;
   // Plan/57 — last submit-result error for the pending request (null when none
@@ -57,8 +63,14 @@ class ChatViewModel extends ViewModel<ChatState> {
   String? _peerOfflineReason;
   ConnectionStatus? _lastStatus;
 
-  ChatViewModel(this._read, this._sync, this._conn, this._prefs, this._storage)
-    : super(const ChatReady(messages: [])) {
+  ChatViewModel(
+    this._read,
+    this._sync,
+    this._conn,
+    this._prefs,
+    this._storage, [
+    this._actions,
+  ]) : super(const ChatReady(messages: [])) {
     // Plan/32f — do NOT seed _streaming/_working from the shared SyncService
     // here: it may still be bound to the PREVIOUS chat (this VM is recreated
     // on session switch, before _bootstrap rebinds via activate). Seeding now
@@ -71,6 +83,13 @@ class ChatViewModel extends ViewModel<ChatState> {
     _uiReqSub = _sync.extensionUiRequestStream.listen(_onExtensionUiRequest);
     _roomsSub = _conn.roomsStream.listen((_) => _recompute());
     _statusSub = _conn.statusStream.listen(_onStatus);
+    _usageSub = _sync.usageStream.listen(_onUsage);
+    _usage = _sync.latestUsage;
+    if (_actions != null) {
+      _metaSub = _actions.activeRoomMetaStream.listen((_) => _refreshCatalogue());
+      // ignore: discarded_futures
+      _refreshCatalogue();
+    }
     // ignore: discarded_futures
     _bootstrap();
   }
@@ -275,6 +294,22 @@ class ChatViewModel extends ViewModel<ChatState> {
     _recompute();
   }
 
+  void _onUsage(Usage? u) {
+    _usage = u;
+    _recompute();
+  }
+
+  Future<void> _refreshCatalogue() async {
+    if (_actions == null) return;
+    try {
+      final cat = await _actions.listModels();
+      _modelsCatalogue = cat;
+      _recompute();
+    } catch (_) {
+      // Ignored if offline
+    }
+  }
+
   void _recompute() {
     if (_disposed) return;
     emit(_compose());
@@ -297,6 +332,45 @@ class ChatViewModel extends ViewModel<ChatState> {
         ? const PresenceOnline() as PresenceState
         : const PresenceOffline(sinceTs: 0);
 
+    ContextUsage? contextUsage;
+    final modelName = activeRoom?.model;
+    WireModel? wireModel;
+    if (_modelsCatalogue != null) {
+      if (_modelsCatalogue!.current != null &&
+          (modelName == null ||
+              _modelsCatalogue!.current!.id == modelName ||
+              _modelsCatalogue!.current!.name == modelName)) {
+        wireModel = _modelsCatalogue!.current;
+      } else if (modelName != null) {
+        for (final m in _modelsCatalogue!.models) {
+          if (m.id == modelName || m.name == modelName) {
+            wireModel = m;
+            break;
+          }
+        }
+      }
+    }
+    int limit = wireModel?.contextWindow ?? 0;
+    if (limit <= 0 && modelName != null && modelName.isNotEmpty) {
+      limit = _guessContextWindow(modelName);
+    }
+    if (limit <= 0) {
+      limit = 200000;
+    }
+    if (_usage != null) {
+      final input = _usage?.inputTokens ?? 0;
+      final output = _usage?.outputTokens ?? 0;
+      final used = input + output;
+      final pct = limit > 0 ? ((used / limit) * 100).clamp(0.0, 100.0) : 0.0;
+      contextUsage = ContextUsage(
+        inputTokens: input,
+        outputTokens: output,
+        usedTokens: used,
+        totalTokens: limit,
+        percentage: pct,
+      );
+    }
+
     return ChatReady(
       messages: _messages,
       streaming: _streaming,
@@ -308,6 +382,7 @@ class ChatViewModel extends ViewModel<ChatState> {
       queuedMessages: _queuedMessages,
       pendingUiRequest: _pendingUiRequest,
       pendingUiError: _pendingUiError,
+      contextUsage: contextUsage,
     );
   }
 
@@ -378,6 +453,37 @@ class ChatViewModel extends ViewModel<ChatState> {
     _uiReqSub?.cancel();
     _roomsSub?.cancel();
     _statusSub?.cancel();
+    _usageSub?.cancel();
+    _metaSub?.cancel();
     super.dispose();
   }
+}
+
+int _guessContextWindow(String modelName) {
+  final lower = modelName.toLowerCase();
+  if (lower.contains('gemini')) {
+    if (lower.contains('1.5') || lower.contains('2.0') || lower.contains('flash') || lower.contains('pro')) {
+      return 1000000;
+    }
+    return 1000000;
+  }
+  if (lower.contains('claude') ||
+      lower.contains('sonnet') ||
+      lower.contains('opus') ||
+      lower.contains('haiku')) {
+    return 200000;
+  }
+  if (lower.contains('gpt-4') ||
+      lower.contains('o1') ||
+      lower.contains('o3') ||
+      lower.contains('o4')) {
+    return 128000;
+  }
+  if (lower.contains('deepseek')) {
+    return 64000;
+  }
+  if (lower.contains('qwen') || lower.contains('llama')) {
+    return 128000;
+  }
+  return 200000;
 }

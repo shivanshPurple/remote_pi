@@ -455,4 +455,44 @@ void main() {
     sync.dispose();
     conn.dispose();
   });
+
+  test('context window usage tracks model limit and token counts', () async {
+    final ch = _FakeChannel();
+    final storage = _FakeStorage();
+    final conn = ConnectionManager(
+      factory: (_, _) async => ch,
+      storage: storage,
+      emitDebounce: Duration.zero,
+    );
+    final boxes = LocalBoxes();
+    final sync = SyncService(conn, boxes);
+    final read = SessionReadRepository(boxes);
+    final prefs = Preferences(_FakeSecureStorage());
+    await prefs.setSelectedPeerEpk(_peer.remoteEpk);
+    await prefs.setSelectedRoom(epk: _peer.remoteEpk, roomId: 'main');
+
+    conn.adopt(ch, _peer);
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    final vm = ChatViewModel(read, sync, conn, prefs, storage);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    // Agent completes a turn with token usage
+    ch.push(
+      AgentDone(
+        inReplyTo: 'u1',
+        usage: const Usage(inputTokens: 50000, outputTokens: 5000),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+
+    final ready = vm.state as ChatReady;
+    expect(ready.contextUsage, isNotNull);
+    expect(ready.contextUsage!.inputTokens, 50000);
+    expect(ready.contextUsage!.outputTokens, 5000);
+    expect(ready.contextUsage!.usedTokens, 55000);
+
+    vm.dispose();
+    sync.dispose();
+    conn.dispose();
+  });
 }

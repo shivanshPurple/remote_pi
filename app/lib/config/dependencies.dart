@@ -143,6 +143,7 @@ Future<void> setupDependencies() async {
       _injector.get<ConnectionManager>(),
       _injector.get<Preferences>(),
       _injector.get<PairingStorage>(),
+      _injector.get<IActionsRepository>(),
     ),
   );
   _injector.addViewModel<HomeViewModel>(

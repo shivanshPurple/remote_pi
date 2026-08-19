@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:app/data/actions/actions_repository.dart';
 import 'package:app/data/images/image_picker_service.dart';
@@ -25,6 +26,10 @@ class _FakePicker implements IImagePickerService {
   Future<PickedImage?> pickFromCamera() async => next;
   @override
   Future<PickedImage?> pickFromGallery() async => next;
+  @override
+  Future<PickedImage?> pasteFromClipboard() async => next;
+  @override
+  Future<PickedImage?> fromBytes(Uint8List rawBytes) async => next;
 }
 
 class _FakeActions implements IActionsRepository {

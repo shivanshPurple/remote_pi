@@ -6,6 +6,8 @@ import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'package:pasteboard/pasteboard.dart';
+
 /// Plan/30 — pick one image from the camera or the gallery and compress it
 /// (JPEG, longest side ≤1568px, q80) entirely on-device before it travels
 /// inline on a `user_message`. No file is uploaded out-of-band.
@@ -20,6 +22,13 @@ abstract class IImagePickerService {
   /// Pick from the gallery (system PHPicker / Photo Picker — no permission).
   /// Returns null if the user cancelled.
   Future<PickedImage?> pickFromGallery();
+
+  /// Reads an image from the system clipboard. Returns null if clipboard
+  /// does not contain an image.
+  Future<PickedImage?> pasteFromClipboard();
+
+  /// Wraps and compresses raw image bytes.
+  Future<PickedImage?> fromBytes(Uint8List rawBytes);
 }
 
 /// A picked + compressed image ready for preview and sending. Bytes are raw
@@ -70,6 +79,78 @@ class ImagePickerService implements IImagePickerService {
   Future<PickedImage?> pickFromGallery() =>
       _pickAndCompress(ImageSourceKind.gallery);
 
+  @override
+  Future<PickedImage?> pasteFromClipboard() async {
+    final bytes = await _backend.pasteFromClipboard();
+    if (bytes == null || bytes.isEmpty) return null;
+    return _processRawBytes(bytes);
+  }
+
+  @override
+  Future<PickedImage?> fromBytes(Uint8List rawBytes) async {
+    if (rawBytes.isEmpty) return null;
+    return _processRawBytes(rawBytes);
+  }
+
+  Future<PickedImage?> _processRawBytes(Uint8List bytes) async {
+    var side = _maxSide;
+    var quality = _quality;
+    var compressed = await _backend.compressBytes(
+      bytes,
+      maxSide: side,
+      quality: quality,
+    );
+
+    var pass = 0;
+    while (compressed.length > _ceilingBytes && pass < _maxExtraPasses) {
+      pass++;
+      quality = (quality - 15).clamp(35, 100);
+      side = (side * 0.85).round();
+      compressed = await _backend.compressBytes(
+        bytes,
+        maxSide: side,
+        quality: quality,
+      );
+    }
+
+    final mime = _detectMime(compressed.isNotEmpty ? compressed : bytes);
+    return PickedImage(
+      bytes: compressed.isNotEmpty ? compressed : bytes,
+      mime: mime,
+    );
+  }
+
+  static String _detectMime(Uint8List bytes) {
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return 'image/png';
+    }
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return 'image/jpeg';
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return 'image/webp';
+    }
+    if (bytes.length >= 2 && bytes[0] == 0x42 && bytes[1] == 0x4D) {
+      return 'image/bmp';
+    }
+    return 'image/jpeg';
+  }
+
   Future<PickedImage?> _pickAndCompress(ImageSourceKind source) async {
     final path = await _backend.pick(source);
     if (path == null) return null; // user cancelled
@@ -110,6 +191,16 @@ abstract class ImagePickerBackend {
     required int maxSide,
     required int quality,
   });
+
+  /// Reads image bytes directly from the clipboard.
+  Future<Uint8List?> pasteFromClipboard();
+
+  /// Compresses raw image bytes directly in memory.
+  Future<Uint8List> compressBytes(
+    Uint8List bytes, {
+    required int maxSide,
+    required int quality,
+  });
 }
 
 /// Desktop file-picker path. `image_picker` works on Linux/Windows for
@@ -147,6 +238,20 @@ class DesktopImagePickerBackend implements ImagePickerBackend {
     // No flutter_image_compress on Linux/Windows — return the file
     // bytes unchanged. Callers already treat empty as a graceful no-op.
     return File(path).readAsBytes();
+  }
+
+  @override
+  Future<Uint8List?> pasteFromClipboard() async {
+    return Pasteboard.image;
+  }
+
+  @override
+  Future<Uint8List> compressBytes(
+    Uint8List bytes, {
+    required int maxSide,
+    required int quality,
+  }) async {
+    return bytes;
   }
 }
 
@@ -191,5 +296,26 @@ class PlatformImagePickerBackend implements ImagePickerBackend {
     // Fallback: if the platform compressor returns null (unsupported source
     // format), surface an empty result so the caller can no-op gracefully.
     return out ?? Uint8List(0);
+  }
+
+  @override
+  Future<Uint8List?> pasteFromClipboard() async {
+    return Pasteboard.image;
+  }
+
+  @override
+  Future<Uint8List> compressBytes(
+    Uint8List bytes, {
+    required int maxSide,
+    required int quality,
+  }) async {
+    final out = await FlutterImageCompress.compressWithList(
+      bytes,
+      minWidth: maxSide,
+      minHeight: maxSide,
+      quality: quality,
+      format: CompressFormat.jpeg,
+    );
+    return out;
   }
 }

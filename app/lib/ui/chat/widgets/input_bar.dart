@@ -171,6 +171,17 @@ class _InputBarState extends State<InputBar> {
   /// composer button, exactly as before.
   KeyEventResult _onComposerKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final isPaste =
+        event.logicalKey == LogicalKeyboardKey.keyV &&
+        (HardwareKeyboard.instance.isControlPressed ||
+            HardwareKeyboard.instance.isMetaPressed);
+    if (isPaste && !widget.disabled) {
+      // ignore: discarded_futures
+      _handlePaste();
+      return KeyEventResult.handled;
+    }
+
     final isEnter =
         event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter;
@@ -196,6 +207,37 @@ class _InputBarState extends State<InputBar> {
     }
     _submit();
     return KeyEventResult.handled;
+  }
+
+  Future<void> _handlePaste() async {
+    final attachmentVm = widget.attachment;
+    if (attachmentVm != null) {
+      final pasted = await attachmentVm.pasteFromClipboard();
+      if (pasted) return;
+    }
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text != null && data!.text!.isNotEmpty) {
+      _insertTextAtCursor(data.text!);
+    }
+  }
+
+  void _insertTextAtCursor(String text) {
+    final value = _controller.value;
+    final sel = value.selection;
+    if (!sel.isValid) {
+      final newText = '${value.text}$text';
+      _controller.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: newText.length),
+      );
+      return;
+    }
+    final newText =
+        '${sel.textBefore(value.text)}$text${sel.textAfter(value.text)}';
+    _controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: sel.start + text.length),
+    );
   }
 
   /// Replaces the current selection (or inserts at the caret) with a newline

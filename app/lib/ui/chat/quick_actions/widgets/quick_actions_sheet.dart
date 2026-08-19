@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app/config/dependencies.dart';
 import 'package:app/data/actions/actions_repository.dart' show ActionFailure;
+import 'package:app/domain/session_state.dart';
 import 'package:app/protocol/protocol.dart';
 import 'package:app/routing/adaptive.dart';
 import 'package:app/ui/core/themes/themes.dart';
@@ -156,6 +157,7 @@ class _QuickActionsSheetBodyState extends State<QuickActionsSheetBody> {
             const _Divider(),
             _ModelRow(
               currentLabel: vm.currentModel?.name ?? vm.currentModelName,
+              contextLimit: vm.currentModel?.contextWindow,
               busy: busyAction == ActionName.modelSet,
               onTap: () => _openModelPicker(vm),
             ),
@@ -398,10 +400,12 @@ class _ModelRow extends StatelessWidget {
   /// otherwise the `room_meta.model` string. `null` falls back to the
   /// generic placeholder. Reads cheap so the picker can lazy-load.
   final String? currentLabel;
+  final int? contextLimit;
   final bool busy;
   final VoidCallback onTap;
   const _ModelRow({
     required this.currentLabel,
+    this.contextLimit,
     required this.busy,
     required this.onTap,
   });
@@ -410,6 +414,9 @@ class _ModelRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final label = currentLabel ?? (busy ? 'Switching…' : 'Choose a model');
+    final limitStr = contextLimit != null && contextLimit! > 0
+        ? ' (${ContextUsage.formatTokenCount(contextLimit!)} limit)'
+        : '';
     return InkWell(
       key: const Key('qa-model-row'),
       onTap: busy ? null : onTap,
@@ -424,7 +431,7 @@ class _ModelRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Model',
+                    'Model$limitStr',
                     style: TextStyle(
                       fontFamily: kMonoFamily,
                       fontSize: 11,

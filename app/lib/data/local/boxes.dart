@@ -9,6 +9,8 @@
 //   DURABLE  sessions_index         key = <epk>:<roomId>   → SessionIndexRecord
 //   VOLATILE runtime  (wiped@boot)  key = <epk>:<roomId>   → RuntimeRecord
 
+import 'dart:io';
+
 import 'package:app/data/transport/epk_encoding.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -21,6 +23,7 @@ const String _kRuntime = 'runtime';
 /// the same open box objects (`Hive.openBox` is idempotent).
 class LocalBoxes {
   static bool _initialized = false;
+  static String? _boxPath;
 
   /// Open the v2 namespace and the always-on boxes; **wipe `runtime`** before
   /// anything subscribes (#3 / Risk 2). Call once during bootstrap, before
@@ -28,6 +31,13 @@ class LocalBoxes {
   static Future<void> init() async {
     if (_initialized) return;
     await Hive.initFlutter(_kNamespace);
+    final userProfile =
+        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
+    if (userProfile != null) {
+      _boxPath =
+          '$userProfile${Platform.pathSeparator}Documents${Platform.pathSeparator}$_kNamespace';
+    }
+    _cleanStaleLocks();
     await _openCommon();
     _initialized = true;
   }
@@ -36,15 +46,47 @@ class LocalBoxes {
   /// re-opens + wipes the volatile box, so a second call simulates a restart
   /// (and lets tests assert the wipe).
   static Future<void> initForTest(String path) async {
-    if (!_initialized) Hive.init(path);
+    if (!_initialized) {
+      _boxPath = path;
+      Hive.init(path);
+    }
+    _cleanStaleLocks();
     await _openCommon();
     _initialized = true;
   }
 
+  static void _cleanStaleLocks() {
+    try {
+      final p = _boxPath;
+      if (p == null) return;
+      final dir = Directory(p);
+      if (dir.existsSync()) {
+        for (final file in dir.listSync().whereType<File>()) {
+          if (file.path.endsWith('.lock')) {
+            try {
+              file.deleteSync();
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   static Future<void> _openCommon() async {
-    await Hive.openBox<dynamic>(_kSessionsIndex);
-    final runtime = await Hive.openBox<dynamic>(_kRuntime);
-    await runtime.clear(); // VOLATILE — zero on boot (#3)
+    try {
+      await Hive.openBox<dynamic>(_kSessionsIndex);
+    } catch (_) {
+      _cleanStaleLocks();
+      await Hive.openBox<dynamic>(_kSessionsIndex);
+    }
+    try {
+      final runtime = await Hive.openBox<dynamic>(_kRuntime);
+      await runtime.clear(); // VOLATILE — zero on boot (#3)
+    } catch (_) {
+      _cleanStaleLocks();
+      final runtime = await Hive.openBox<dynamic>(_kRuntime);
+      await runtime.clear();
+    }
   }
 
   Box<dynamic> sessionsIndexBox() => Hive.box<dynamic>(_kSessionsIndex);
@@ -53,8 +95,15 @@ class LocalBoxes {
 
   /// Per-session message box. Lazily opened; idempotent (returns the already
   /// open box on subsequent calls).
-  Future<Box<dynamic>> msgsBox(String epk, String roomId) =>
-      Hive.openBox<dynamic>(msgsBoxName(epk, roomId));
+  Future<Box<dynamic>> msgsBox(String epk, String roomId) async {
+    final name = msgsBoxName(epk, roomId);
+    try {
+      return await Hive.openBox<dynamic>(name);
+    } catch (_) {
+      _cleanStaleLocks();
+      return await Hive.openBox<dynamic>(name);
+    }
+  }
 
   /// Synchronous accessor for a msgs box known to be open already.
   Box<dynamic> openMsgsBox(String epk, String roomId) =>

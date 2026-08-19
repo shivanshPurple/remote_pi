@@ -32,6 +32,18 @@ class _FakePicker implements IImagePickerService {
     if (fail) throw Exception('boom');
     return next;
   }
+
+  @override
+  Future<PickedImage?> pasteFromClipboard() async {
+    if (fail) throw Exception('boom');
+    return next;
+  }
+
+  @override
+  Future<PickedImage?> fromBytes(Uint8List rawBytes) async {
+    if (fail) throw Exception('boom');
+    return next;
+  }
 }
 
 class _FakeActions implements IActionsRepository {
@@ -176,6 +188,20 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(vm.state.visionSupported, isFalse);
+    vm.dispose();
+  });
+
+  test('pasteFromClipboard attaches image and updates preview state', () async {
+    final picker = _FakePicker();
+    final actions = _FakeActions();
+    final vm = AttachmentViewModel(picker, actions);
+
+    expect(vm.hasImage, isFalse);
+    final ok = await vm.pasteFromClipboard();
+    expect(ok, isTrue);
+    expect(vm.hasImage, isTrue);
+    expect(vm.takeImageForSend(), isNotNull);
+    expect(vm.hasImage, isFalse);
     vm.dispose();
   });
 }

@@ -83,6 +83,9 @@ class SyncService extends Service {
   String? _workingReplyTo;
   final StreamController<bool> _workingController =
       StreamController<bool>.broadcast();
+  Usage? _latestUsage;
+  final StreamController<Usage?> _usageController =
+      StreamController<Usage?>.broadcast();
 
   // Plan/32 safety net — if the relay never echoes a sent message back, the
   // optimistic `pending:true` bubble would spin forever. After this window we
@@ -129,6 +132,10 @@ class SyncService extends Service {
   bool get isWorking => _working;
   Stream<bool> get workingStream => _workingController.stream;
 
+  /// Latest token usage reported by the active agent turn.
+  Usage? get latestUsage => _latestUsage;
+  Stream<Usage?> get usageStream => _usageController.stream;
+
   /// `cancel` target for the in-flight reply (null when idle).
   String? get workingReplyTo => _workingReplyTo;
 
@@ -166,6 +173,7 @@ class SyncService extends Service {
     _workingReplyTo = null;
     _sawRemoteWorking = false;
     _setQueuedMessages(const []);
+    _setUsage(null);
     // Session switch: the previous chat's in-flight sends are no longer ours
     // to confirm — drop their backstops so a stale timer can't fire later.
     _cancelAllSendTimers();
@@ -174,6 +182,11 @@ class SyncService extends Service {
       _working = false;
       if (!_workingController.isClosed) _workingController.add(false);
     }
+  }
+
+  void _setUsage(Usage? usage) {
+    _latestUsage = usage;
+    if (!_usageController.isClosed) _usageController.add(usage);
   }
 
   Future<void> sendMessage(
@@ -463,13 +476,15 @@ class SyncService extends Service {
         _flushTimer = Timer(const Duration(milliseconds: 16), _flushChunks);
         _setWorking(true, replyTo: inReplyTo);
 
-      case AgentDone(:final inReplyTo):
+      case AgentDone(:final inReplyTo, :final usage):
         // Finalize whatever text accumulated since the last tool boundary.
         final text = _finalizeSegment();
         _clearSteeringLabel(inReplyTo);
         _setWorking(false, preview: text.isEmpty ? null : text);
+        if (usage != null) _setUsage(usage);
 
-      case AgentMessage(:final inReplyTo, :final text):
+      case AgentMessage(:final inReplyTo, :final text, :final usage):
+        if (usage != null) _setUsage(usage);
         // ignore: discarded_futures
         _upsert(
           MsgRole.assistant,
@@ -756,6 +771,15 @@ class SyncService extends Service {
           sessionStartedAt: DateTime.fromMillisecondsSinceEpoch(started),
         ),
       );
+      for (final e in h.events.reversed) {
+        if (e is AgentMessageEvt && e.usage != null) {
+          _setUsage(e.usage);
+          break;
+        } else if (e is ToolRequestEvt && e.usage != null) {
+          _setUsage(e.usage);
+          break;
+        }
+      }
     }
   }
 
@@ -1180,5 +1204,6 @@ class SyncService extends Service {
     _extensionUiController.close();
     _workingController.close();
     _queuedController.close();
+    _usageController.close();
   }
 }

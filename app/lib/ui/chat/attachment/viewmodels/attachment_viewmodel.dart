@@ -41,6 +41,24 @@ class AttachmentViewModel extends ViewModel<AttachmentState> {
 
   Future<void> pickFromCamera() => _pick(_picker.pickFromCamera);
   Future<void> pickFromGallery() => _pick(_picker.pickFromGallery);
+  Future<bool> pasteFromClipboard() async {
+    if (state is AttachmentPicking) return false;
+    final vision = state.visionSupported;
+    emit(AttachmentPicking(visionSupported: vision));
+    try {
+      final img = await _picker.pasteFromClipboard();
+      if (img == null) {
+        emit(AttachmentEmpty(visionSupported: vision));
+        return false;
+      }
+      emit(AttachmentAttached(image: img, visionSupported: vision));
+      return true;
+    } catch (_) {
+      emit(AttachmentEmpty(visionSupported: vision));
+      if (!_hints.isClosed) _hints.add(AttachHint.pickFailed);
+      return false;
+    }
+  }
 
   Future<void> _pick(Future<PickedImage?> Function() pick) async {
     if (state is AttachmentPicking) return;
