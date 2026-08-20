@@ -94,3 +94,9 @@ graphify-out
 marketing/
 
 openspec
+
+# local Arch makepkg output (tarball is copied next to PKGBUILD)
+packaging/arch/*.tar.gz
+packaging/arch/*.pkg.tar.zst
+packaging/arch/pkg/
+packaging/arch/src/

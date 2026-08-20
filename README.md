@@ -34,7 +34,7 @@ This fork expands on that for developers running Pi on **remote VMs, cloud insta
 | Platform | Status |
 |---|---|
 | Windows (x64) | [Native `.exe` Runner](./app) |
-| Linux (x64 / ARM64) | [Native Desktop Runner](./app) |
+| Linux (x64) | [Release tarball](https://github.com/shivanshPurple/remote_pi/releases) + [Arch PKGBUILD](./packaging/arch) |
 | Google Play (Android) | [Get it on Google Play](https://play.google.com/store/apps/details?id=work.jacobmoura.remotepi) |
 | App Store (iOS) | [Download on the App Store](https://apps.apple.com/app/remote-pi-coding-agent/id6773499691) |
 | APK (sideload, Android) | [GitHub Releases](https://github.com/shivanshPurple/remote_pi/releases) |
@@ -112,6 +112,18 @@ flutter build windows --release   # For Windows
 flutter build linux --release     # For Linux
 flutter build apk --release       # For Android
 ```
+
+### Arch Linux (local install)
+
+Repo is private, so this is a local `makepkg`, not AUR:
+
+```bash
+(cd app && flutter build linux --release)
+bash packaging/linux/build_tarball.sh
+bash packaging/arch/makepkg-local.sh
+```
+
+Installs to `/opt/remote-pi` with `/usr/bin/remote-pi`. Details in [`packaging/arch`](./packaging/arch).
 
 ### Pi Extension
 ```bash

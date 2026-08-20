@@ -1,9 +1,9 @@
 [Desktop Entry]
 Name=Remote Pi
 Comment=Control your Pi coding agent
-Exec=app
+Exec=remote-pi
 Icon=remotepi
 Type=Application
 Categories=Development;Utility;
 Terminal=false
-StartupWMClass=app
+StartupWMClass=remote_pi

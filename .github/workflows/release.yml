@@ -61,8 +61,8 @@ jobs:
           path: dist/RemotePi-Setup-x64.exe
 
   build-linux:
-    name: Linux AppImage
-    runs-on: ubuntu-22.04
+    name: Linux tarball
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -83,16 +83,14 @@ jobs:
           flutter pub get
           flutter build linux --release
 
-      - name: Package AppImage
-        run: |
-          chmod +x packaging/linux/build_appimage.sh
-          bash packaging/linux/build_appimage.sh
+      - name: Package Linux tarball
+        run: bash packaging/linux/build_tarball.sh
 
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-appimage
-          path: dist/RemotePi-x86_64.AppImage
+          name: linux-tarball
+          path: dist/RemotePi-linux-x64-*.tar.gz
 
   build-android:
     name: Android APK
@@ -147,10 +145,10 @@ jobs:
         run: |
           mkdir -p dist
           cp dist-raw/windows-installer/RemotePi-Setup-x64.exe dist/
-          cp dist-raw/linux-appimage/RemotePi-x86_64.AppImage dist/
+          cp dist-raw/linux-tarball/RemotePi-linux-x64-*.tar.gz dist/
           cp dist-raw/android-apk/RemotePi.apk dist/
           cd dist
-          sha256sum RemotePi-Setup-x64.exe RemotePi-x86_64.AppImage RemotePi.apk > SHA256SUMS
+          sha256sum RemotePi-Setup-x64.exe RemotePi-linux-x64-*.tar.gz RemotePi.apk > SHA256SUMS
           cat SHA256SUMS
 
       - name: Create or Update GitHub Release
@@ -161,7 +159,7 @@ jobs:
           NOTES=$(cat << 'EOF'
           ### Downloads
           - **Windows**: `RemotePi-Setup-x64.exe` (Setup installer with shortcuts & uninstaller)
-          - **Linux**: `RemotePi-x86_64.AppImage` (Universal executable, run with `chmod +x`)
+          - **Linux (x64)**: `RemotePi-linux-x64-*.tar.gz` (Flutter bundle; Arch: see `packaging/arch`)
           - **Android**: `RemotePi.apk` (Direct install APK)
           
           Verify package integrity with the included `SHA256SUMS`.

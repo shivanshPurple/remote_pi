@@ -1,0 +1,36 @@
+# Maintainer: Shivansh <shivanshsaini17@gmail.com>
+# Private-repo local package. Do not push to the AUR until the GitHub
+# repo (or at least the release tarball) is public.
+#
+# Install:
+#   bash packaging/linux/build_tarball.sh   # or download the release asset
+#   bash packaging/arch/makepkg-local.sh
+
+pkgname=remote-pi-bin
+pkgver=1.2.0
+pkgrel=1
+pkgdesc="Desktop controller for the Pi coding agent"
+arch=('x86_64')
+url="https://github.com/shivanshPurple/remote_pi"
+license=('MIT')
+depends=('gtk3' 'libsecret' 'jsoncpp' 'xz')
+provides=('remote-pi')
+conflicts=('remote-pi')
+options=('!strip')
+source=("RemotePi-linux-x64-${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cd "$srcdir/RemotePi-linux-x64-${pkgver}"
+
+  install -d "$pkgdir/opt/remote-pi"
+  cp -a remote_pi lib data "$pkgdir/opt/remote-pi/"
+  chmod 755 "$pkgdir/opt/remote-pi/remote_pi"
+
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/remote-pi/remote_pi "$pkgdir/usr/bin/remote-pi"
+
+  install -Dm644 remotepi.desktop "$pkgdir/usr/share/applications/remote-pi.desktop"
+  install -Dm644 remotepi.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/remotepi.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+}
