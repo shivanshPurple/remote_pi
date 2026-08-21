@@ -1496,5 +1496,103 @@ void _registerRoomsTests() {
       },
     );
   });
+
+  group('ConnectionManager foreground reconnect', () {
+    test('long background while online reconnects immediately', () async {
+      var calls = 0;
+      final cm = ConnectionManager(
+        factory: (peer, cancel) async {
+          calls++;
+          return _makeChannel();
+        },
+        storage: _FakeStorage([_fakePeer()]),
+        emitDebounce: Duration.zero,
+      );
+      await cm.boot();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(cm.status, isA<StatusOnline>());
+      expect(calls, 1);
+
+      cm.onBackground();
+      await cm.onForeground(
+        now: DateTime.now().add(const Duration(seconds: 60)),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(calls, 2);
+      expect(cm.status, isA<StatusOnline>());
+      cm.dispose();
+    });
+
+    test('brief background while online leaves the socket', () async {
+      var calls = 0;
+      final cm = ConnectionManager(
+        factory: (peer, cancel) async {
+          calls++;
+          return _makeChannel();
+        },
+        storage: _FakeStorage([_fakePeer()]),
+        emitDebounce: Duration.zero,
+      );
+      await cm.boot();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(calls, 1);
+
+      cm.onBackground();
+      await cm.onForeground(
+        now: DateTime.now().add(const Duration(seconds: 1)),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(calls, 1, reason: 'sub-5s hop must not reconnect');
+      expect(cm.status, isA<StatusOnline>());
+      cm.dispose();
+    });
+
+    test('resume while retrying skips backoff and connects now', () async {
+      var calls = 0;
+      final cm = ConnectionManager(
+        factory: (peer, cancel) async {
+          calls++;
+          if (calls == 1) throw Exception('refused');
+          return _makeChannel();
+        },
+        storage: _FakeStorage([_fakePeer()]),
+        emitDebounce: Duration.zero,
+      );
+      await cm.boot();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(cm.status, isA<StatusRetrying>());
+      expect(calls, 1);
+
+      cm.onBackground();
+      await cm.onForeground();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      expect(calls, 2);
+      expect(cm.status, isA<StatusOnline>());
+      cm.dispose();
+    });
+
+    test('resumed without a prior pause is a no-op', () async {
+      var calls = 0;
+      final cm = ConnectionManager(
+        factory: (peer, cancel) async {
+          calls++;
+          return _makeChannel();
+        },
+        storage: _FakeStorage([_fakePeer()]),
+        emitDebounce: Duration.zero,
+      );
+      await cm.boot();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(calls, 1);
+
+      await cm.onForeground();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(calls, 1);
+      cm.dispose();
+    });
+  });
 }
 

@@ -5,6 +5,7 @@ import 'package:app/config/platform.dart';
 import 'package:app/config/utils/injector.dart';
 import 'package:app/data/actions/actions_repository.dart';
 import 'package:app/data/mesh/mesh_client.dart';
+import 'package:app/data/notifications/notification_service.dart';
 import 'package:app/data/mesh/mesh_sync_service.dart';
 import 'package:app/data/local/boxes.dart';
 import 'package:app/data/preferences/preferences.dart';
@@ -216,7 +217,19 @@ Future<void> setupDependencies() async {
     ),
   );
 
+  _injector.addService<NotificationService>(
+    () => NotificationService(
+      prefs: _injector.get<Preferences>(),
+      sync: _injector.get<SyncService>(),
+    ),
+  );
+
   _injector.commit();
+  try {
+    await _injector.get<NotificationService>().init();
+  } catch (_) {
+    // Notifications are best-effort; never block first frame.
+  }
 }
 
 // ---------------------------------------------------------------------------

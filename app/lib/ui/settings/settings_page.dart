@@ -341,6 +341,23 @@ class _DisplaySection extends StatelessWidget {
           value: prefs.hideToolCalls,
           onChanged: (v) => prefs.setHideToolCalls(v),
         ),
+        SwitchListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 18),
+          activeThumbColor: colors.accent,
+          title: Text(
+            'Notifications',
+            style: context.typo.sansBody.copyWith(color: colors.text),
+          ),
+          subtitle: Text(
+            'Alert when Pi finishes working or needs input while you\'re away.',
+            style: context.typo.sansBody.copyWith(
+              color: colors.muted,
+              fontSize: 12,
+            ),
+          ),
+          value: prefs.notificationsEnabled,
+          onChanged: (v) => prefs.setNotificationsEnabled(v),
+        ),
         const SizedBox(height: 8),
       ],
     );

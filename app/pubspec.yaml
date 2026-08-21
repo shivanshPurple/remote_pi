@@ -87,6 +87,11 @@ dependencies:
   # against the release manifest's semver.
   package_info_plus: ^8.0.0
 
+  # Android local notifications when Pi finishes a turn or needs input
+  # while the app is backgrounded. No FCM — only fires while the Dart
+  # isolate is still alive (see NotificationService).
+  flutter_local_notifications: ^19.4.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

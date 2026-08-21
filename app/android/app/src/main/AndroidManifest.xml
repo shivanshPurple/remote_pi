@@ -6,6 +6,9 @@
          lets the app detect offline state without polling. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- Android 13+ runtime notification permission. Used for Pi-finished
+         / needs-input alerts while the app is backgrounded. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Plan 29 — voice input. RECORD_AUDIO feeds on-device speech
          recognition; audio is transcribed locally and never written to a
          file nor sent to any server. -->

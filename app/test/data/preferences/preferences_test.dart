@@ -203,6 +203,20 @@ void main() {
       expect(calls, 1);
     });
 
+    test('notificationsEnabled defaults to true and round-trips', () async {
+      final store = _FakeSecureStorage();
+      final p = Preferences(store);
+      await p.load();
+      expect(p.notificationsEnabled, isTrue);
+
+      await p.setNotificationsEnabled(false);
+      expect(p.notificationsEnabled, isFalse);
+
+      final reloaded = Preferences(store);
+      await reloaded.load();
+      expect(reloaded.notificationsEnabled, isFalse);
+    });
+
     test('setSelectedRoom with null epk clears the selection', () async {
       final store = _FakeSecureStorage();
       final p = Preferences(store);

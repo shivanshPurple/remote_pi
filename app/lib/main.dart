@@ -6,6 +6,7 @@ import 'package:app/data/local/boxes.dart';
 import 'package:app/data/mesh/mesh_sync_service.dart';
 import 'package:app/data/preferences/preferences.dart';
 import 'package:app/data/sync/sync_service.dart';
+import 'package:app/data/notifications/notification_service.dart';
 import 'package:app/data/transport/connection_manager.dart';
 import 'package:app/pairing/owner_identity_bridge.dart';
 import 'package:app/pairing/storage.dart';
@@ -88,24 +89,32 @@ class _RemotePiAppState extends State<RemotePiApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// Plan 24 — keep the mesh poll timer aligned with the app's
-  /// foreground lifecycle. Polling runs ONLY while resumed; in
-  /// inactive/paused/hidden/detached we cancel so we don't drain the
-  /// battery (and we'll resync via `pullOnDemand` on the next resume +
-  /// boot path).
+  /// Mesh poll + WS reconnect + notification gate follow the app
+  /// lifecycle. Polling and a stale-socket reconnect run on resume;
+  /// paused/hidden/detached stop polling and mark the app backgrounded.
+  /// `inactive` is ignored (permission dialogs, iOS app switcher).
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final meshSync = injector.get<MeshSyncService>();
+    final conn = injector.get<ConnectionManager>();
+    final notif = injector.get<NotificationService>();
     switch (state) {
       case AppLifecycleState.resumed:
         meshSync.startPolling();
         // ignore: unawaited_futures
         meshSync.pullOnDemand();
-      case AppLifecycleState.inactive:
+        notif.setBackgrounded(false);
+        // ignore: unawaited_futures
+        conn.onForeground();
       case AppLifecycleState.paused:
       case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
         meshSync.stopPolling();
+        conn.onBackground();
+        notif.setBackgrounded(true);
+      case AppLifecycleState.inactive:
+        // iOS app-switcher / Android transient — don't treat as background.
+        break;
     }
   }
 

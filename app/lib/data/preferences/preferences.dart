@@ -18,6 +18,7 @@ class Preferences extends ChangeNotifier {
   bool _onboardingCompleted = false;
   ThemeMode _themeMode = ThemeMode.system;
   AppFontScale _fontScale = AppFontScale.standard;
+  bool _notificationsEnabled = true;
 
   Preferences([FlutterSecureStorage? store])
       : _store = store ?? const FlutterSecureStorage();
@@ -28,6 +29,7 @@ class Preferences extends ChangeNotifier {
   static const _kOnboardingCompletedKey = 'prefs.onboarding_completed';
   static const _kThemeModeKey = 'prefs.theme_mode';
   static const _kFontScaleKey = 'prefs.font_scale';
+  static const _kNotificationsEnabledKey = 'prefs.notifications_enabled';
 
   /// True → chat hides `ToolEvent` rows (only user/assistant text remain).
   bool get hideToolCalls => _hideToolCalls;
@@ -84,6 +86,10 @@ class Preferences extends ChangeNotifier {
   /// `copyWith(fontSize: …)` overrides that a typography-only change would miss.
   AppFontScale get fontScale => _fontScale;
 
+  /// Android: show a system notification when Pi finishes a reply or
+  /// needs input while the app is in the background. Default on.
+  bool get notificationsEnabled => _notificationsEnabled;
+
   /// Hydrate from secure storage. Safe to call multiple times.
   Future<void> load() async {
     var changed = false;
@@ -126,6 +132,14 @@ class Preferences extends ChangeNotifier {
     final scale = AppFontScale.fromName(await _store.read(key: _kFontScaleKey));
     if (scale != _fontScale) {
       _fontScale = scale;
+      changed = true;
+    }
+
+    final notifRaw = await _store.read(key: _kNotificationsEnabledKey);
+    // Missing key → default true (first launch / pre-feature installs).
+    final notif = notifRaw != 'false';
+    if (notif != _notificationsEnabled) {
+      _notificationsEnabled = notif;
       changed = true;
     }
 
@@ -198,6 +212,16 @@ class Preferences extends ChangeNotifier {
     if (_themeMode == value) return;
     _themeMode = value;
     await _store.write(key: _kThemeModeKey, value: value.name);
+    notifyListeners();
+  }
+
+  Future<void> setNotificationsEnabled(bool value) async {
+    if (_notificationsEnabled == value) return;
+    _notificationsEnabled = value;
+    await _store.write(
+      key: _kNotificationsEnabledKey,
+      value: value.toString(),
+    );
     notifyListeners();
   }
 

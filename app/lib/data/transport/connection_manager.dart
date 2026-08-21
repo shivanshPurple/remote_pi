@@ -128,6 +128,13 @@ class ConnectionManager extends Service {
 
   Timer? _retryTimer;
   Timer? _pingTimer;
+  /// Set by [onBackground]; consumed by [onForeground] to decide whether
+  /// the WS is likely half-open after Android froze the process.
+  DateTime? _backgroundedAt;
+  /// Sockets left idle this long in the background are torn down and
+  /// reconnected on resume. Short app-switcher hops skip that.
+  static const staleAfterBackground = Duration(seconds: 5);
+  static const _closeTimeout = Duration(seconds: 2);
   // Plan-18 follow-up — watchdog timer that periodically checks for
   // "stuck offline" state (active peer set but status not online and
   // no retry / connect in flight). When detected, forces a fresh
@@ -407,11 +414,7 @@ class ConnectionManager extends Service {
     if (_status is StatusOnline) {
       final old = (_status as StatusOnline).channel;
       // ignore: unawaited_futures
-      Future(() async {
-        try {
-          await old.close();
-        } catch (_) {}
-      });
+      _closeQuietly(old);
     }
     _retryAttempt = 0;
     _missedPings = 0;
@@ -425,6 +428,53 @@ class ConnectionManager extends Service {
 
   // Permanently disconnect and go to NoPeer.
   Future<void> disconnect() => _teardownActive(emitNoPeer: true);
+
+  /// App went to background (paused/hidden). Remember when so resume can
+  /// detect a stale socket. Does not tear the WS down — a short hop
+  /// should keep the connection.
+  void onBackground() {
+    _backgroundedAt = DateTime.now();
+  }
+
+  /// App returned to the foreground. Android often freezes timers and
+  /// leaves a half-open TCP after a long stay in the background, which
+  /// showed up as a stuck "reconnecting" banner (watchdog is 15s and
+  /// ping is 25s — neither fires while frozen).
+  ///
+  /// - Retrying / offline / connecting: cancel backoff and connect now.
+  /// - Online but backgrounded ≥ [staleAfterBackground]: close (with a
+  ///   short timeout so a hung `sink.close` cannot block forever) and
+  ///   reconnect.
+  /// - Online and only gone briefly: leave the socket.
+  Future<void> onForeground({DateTime? now}) async {
+    final peer = _activePeer;
+    if (peer == null) return;
+    // First launch also delivers `resumed`. Don't cancel the boot connect.
+    final backgroundedAt = _backgroundedAt;
+    if (backgroundedAt == null) return;
+    final t = now ?? DateTime.now();
+    final away = t.difference(backgroundedAt);
+    _backgroundedAt = null;
+    _retryAttempt = 0;
+
+    // Don't abort a connect that's already in flight (boot / previous resume).
+    if (_status is StatusConnecting && _connectInFlight) return;
+
+    if (_status is StatusRetrying ||
+        _status is StatusConnecting ||
+        _status is StatusOffline) {
+      _cancelRetry();
+      _connectCancel?.cancel();
+      await _connect(peer);
+      return;
+    }
+
+    if (_status is StatusOnline) {
+      if (away < staleAfterBackground) return;
+      await _teardownActive(emitNoPeer: false);
+      await _connect(peer);
+    }
+  }
 
   /// Shared implementation between [disconnect] and [switchTo]. When
   /// [emitNoPeer] is false (switch path), the `_status` is left as-is so
@@ -440,7 +490,7 @@ class ConnectionManager extends Service {
     _controlSub?.cancel();
     _controlSub = null;
     if (_status is StatusOnline) {
-      await (_status as StatusOnline).channel.close();
+      await _closeQuietly((_status as StatusOnline).channel);
     }
     if (emitNoPeer) {
       _activePeer = null;
@@ -1137,6 +1187,14 @@ class ConnectionManager extends Service {
     if (!_roomsController.isClosed) {
       _roomsController.add(_roomsSnapshot());
     }
+  }
+
+  /// Close without hanging resume: a half-open TCP can stall
+  /// `WebSocket.sink.close` for minutes.
+  Future<void> _closeQuietly(IChannel ch) async {
+    try {
+      await ch.close().timeout(_closeTimeout);
+    } catch (_) {}
   }
 
   void _cancelRetry() {
