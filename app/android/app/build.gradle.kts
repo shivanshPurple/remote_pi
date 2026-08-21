@@ -31,7 +31,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
         // flutter_local_notifications uses java.time etc. on old APIs —
         // required by its AAR metadata check.
-        coreLibraryDesugaringEnabled = true
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
