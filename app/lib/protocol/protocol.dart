@@ -37,6 +37,7 @@ sealed class ControlInbound {
         // or nested under `meta.working`; read both for forward-compat.
         final rawWorking =
             (j['working'] as bool?) ?? (metaJson?['working'] as bool?);
+        final rawMcp = j['mcp'] ?? metaJson?['mcp'];
         return RoomAnnounced(
           peer: j['peer'] as String,
           roomId: j['room_id'] as String,
@@ -48,6 +49,7 @@ sealed class ControlInbound {
               ? ThinkingLevel.fromWire(rawThinking)
               : null,
           working: rawWorking,
+          mcp: rawMcp != null ? _mcpList(rawMcp) : null,
         );
       }(),
       'room_ended' => RoomEnded(
@@ -77,6 +79,9 @@ sealed class ControlInbound {
           // cleared state), so a plain nullable bool models the patch:
           // null = absent (preserve current), true/false = set.
           working: meta?['working'] as bool?,
+          mcp: meta != null && meta.containsKey('mcp')
+              ? _mcpList(meta['mcp'])
+              : null,
           hasModel: hasModel,
           hasThinking: hasThinking,
         );
@@ -168,6 +173,23 @@ Map<String, dynamic> roomsCheckFrame(List<String> peers) => {
 // "keep current" (omit) from "set to null" (pass `null` explicitly).
 const Object _kRoomInfoUnset = Object();
 
+List<String> _mcpList(dynamic raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final e in raw)
+      if (e is String && e.trim().isNotEmpty) e,
+  ];
+}
+
+bool _strListEq(List<String> a, List<String> b) {
+  if (identical(a, b)) return true;
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
 /// Snapshot of a single Pi room (one cwd / session).
 class RoomInfo {
   final String roomId;
@@ -194,6 +216,10 @@ class RoomInfo {
   /// (idle / not reported yet).
   final bool working;
 
+  /// Names of MCP servers configured for this Pi session (e.g. `exa`).
+  /// Empty when the Pi hasn't published any (legacy extension / relay).
+  final List<String> mcp;
+
   const RoomInfo({
     required this.roomId,
     required this.startedAt,
@@ -202,6 +228,7 @@ class RoomInfo {
     this.model,
     this.thinking,
     this.working = false,
+    this.mcp = const [],
   });
 
   factory RoomInfo.fromJson(Map<String, dynamic> j) {
@@ -216,6 +243,7 @@ class RoomInfo {
           ? ThinkingLevel.fromWire(rawThinking)
           : null,
       working: (j['working'] as bool?) ?? false,
+      mcp: _mcpList(j['mcp'] ?? (j['meta'] is Map ? (j['meta'] as Map)['mcp'] : null)),
     );
   }
 
@@ -227,6 +255,7 @@ class RoomInfo {
     'model': model,
     if (thinking != null) 'thinking': thinking!.wire,
     'working': working,
+    if (mcp.isNotEmpty) 'mcp': mcp,
   };
 
   RoomInfo copyWith({
@@ -236,6 +265,7 @@ class RoomInfo {
     Object? model = _kRoomInfoUnset,
     Object? thinking = _kRoomInfoUnset,
     bool? working,
+    Object? mcp = _kRoomInfoUnset,
   }) => RoomInfo(
     roomId: roomId,
     name: name ?? this.name,
@@ -246,6 +276,9 @@ class RoomInfo {
         ? this.thinking
         : thinking as ThinkingLevel?,
     working: working ?? this.working,
+    mcp: identical(mcp, _kRoomInfoUnset)
+        ? this.mcp
+        : (mcp as List<String>? ?? const []),
   );
 
   @override
@@ -257,11 +290,20 @@ class RoomInfo {
       other.startedAt == startedAt &&
       other.model == model &&
       other.thinking == thinking &&
-      other.working == working;
+      other.working == working &&
+      _strListEq(other.mcp, mcp);
 
   @override
-  int get hashCode =>
-      Object.hash(roomId, name, cwd, startedAt, model, thinking, working);
+  int get hashCode => Object.hash(
+    roomId,
+    name,
+    cwd,
+    startedAt,
+    model,
+    thinking,
+    working,
+    Object.hashAll(mcp),
+  );
 }
 
 class RoomAnnounced extends ControlInbound {
@@ -283,6 +325,9 @@ class RoomAnnounced extends ControlInbound {
   /// frame omitted it (legacy relay); the ConnectionManager then keeps
   /// any previously-known value instead of forcing `false`.
   final bool? working;
+
+  /// MCP server names at announce time. Null = omitted (preserve cache).
+  final List<String>? mcp;
   const RoomAnnounced({
     required this.peer,
     required this.roomId,
@@ -292,6 +337,7 @@ class RoomAnnounced extends ControlInbound {
     this.model,
     this.thinking,
     this.working,
+    this.mcp,
   });
 }
 
@@ -347,12 +393,16 @@ class RoomMetaUpdated extends ControlInbound {
   /// set. No separate `hasWorking` flag is needed because `working` can
   /// never be "explicitly null" on the wire — `false` is the off state.
   final bool? working;
+
+  /// MCP names. Null = this update did not carry `mcp` (preserve cache).
+  final List<String>? mcp;
   const RoomMetaUpdated({
     required this.peer,
     required this.roomId,
     this.model,
     this.thinking,
     this.working,
+    this.mcp,
     this.hasModel = true,
     this.hasThinking = true,
   });

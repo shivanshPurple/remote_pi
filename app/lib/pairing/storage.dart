@@ -24,6 +24,9 @@ class PersistedRoom {
   /// Persisted so the subtitle survives cold starts.
   final String? model;
 
+  /// MCP server names last published for this room.
+  final List<String> mcp;
+
   const PersistedRoom({
     required this.roomId,
     required this.startedAt,
@@ -31,6 +34,7 @@ class PersistedRoom {
     this.cwd,
     this.localName,
     this.model,
+    this.mcp = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -40,6 +44,7 @@ class PersistedRoom {
     'started_at': startedAt,
     'local_name': localName,
     'model': model,
+    if (mcp.isNotEmpty) 'mcp': mcp,
   };
 
   factory PersistedRoom.fromJson(Map<String, dynamic> j) => PersistedRoom(
@@ -49,6 +54,10 @@ class PersistedRoom {
     startedAt: (j['started_at'] as num).toInt(),
     localName: j['local_name'] as String?,
     model: j['model'] as String?,
+    mcp: [
+      for (final e in (j['mcp'] as List<dynamic>? ?? const []))
+        if (e is String && e.isNotEmpty) e,
+    ],
   );
 
   PersistedRoom copyWith({
@@ -57,6 +66,7 @@ class PersistedRoom {
     int? startedAt,
     Object? localName = _unset,
     Object? model = _unset,
+    Object? mcp = _unset,
   }) => PersistedRoom(
     roomId: roomId,
     name: name ?? this.name,
@@ -68,6 +78,9 @@ class PersistedRoom {
     model: identical(model, _unset)
         ? this.model
         : model as String?,
+    mcp: identical(mcp, _unset)
+        ? this.mcp
+        : (mcp as List<String>? ?? const []),
   );
 }
 

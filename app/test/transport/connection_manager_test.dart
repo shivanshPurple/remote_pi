@@ -1140,7 +1140,7 @@ void _registerRoomsTests() {
           cwd: '/Users/x',
           startedAt: 1000,
         ));
-        await Future<void>.delayed(const Duration(milliseconds: 5));
+        await Future<void>.delayed(const Duration(milliseconds: 20));
 
         expect(cm.roomsFor('epkA'), hasLength(1));
         expect(cm.roomsFor('epkA').single.roomId, 'r1');

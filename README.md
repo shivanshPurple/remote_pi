@@ -141,7 +141,8 @@ npm run build
 ### Unreleased
 
 - **Home revamp**: filter tabs removed — live sessions render flat and cached offline sessions fold under a collapsible "Offline (n)" accordion. Sessions sort last-used-first, with actively-working sessions pinned to the top.
-- **Unread badges**: tiles show a count when Pi finishes a turn in a session you're not looking at; opening the session clears it.
+- **Unread dots**: a small accent dot on the left of a Home tile when Pi finishes a turn in a session you're not looking at; opening the session clears it.
+- **MCP chips**: Home tiles show the MCP servers configured for that Pi session (global `~/.pi/agent/mcp.json` plus project `.pi/mcp.json`).
 - **Android notifications** (local): alert when Pi finishes working or needs input while you're in another app.
 - **Fast reconnect on resume**: returning to the app after a long time away now reconnects immediately instead of hanging on "reconnecting…".
 

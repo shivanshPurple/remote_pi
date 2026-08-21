@@ -121,6 +121,48 @@ void main() {
       },
     );
 
+    test('room_announced parses mcp names', () {
+      final c = ControlInbound.tryFromJson({
+        'type': 'room_announced',
+        'peer': 'epk_A',
+        'room_id': 'r1',
+        'started_at': 1,
+        'mcp': ['exa', 'github'],
+      });
+      expect(c, isA<RoomAnnounced>());
+      expect((c! as RoomAnnounced).mcp, ['exa', 'github']);
+    });
+
+    test('room_meta_updated parses mcp; omitted means null (preserve)', () {
+      final withMcp = ControlInbound.tryFromJson({
+        'type': 'room_meta_updated',
+        'peer': 'epk_A',
+        'room_id': 'r1',
+        'meta': {
+          'working': false,
+          'mcp': ['exa'],
+        },
+      });
+      expect((withMcp! as RoomMetaUpdated).mcp, ['exa']);
+
+      final omitted = ControlInbound.tryFromJson({
+        'type': 'room_meta_updated',
+        'peer': 'epk_A',
+        'room_id': 'r1',
+        'meta': {'working': true},
+      });
+      expect((omitted! as RoomMetaUpdated).mcp, isNull);
+    });
+
+    test('RoomInfo serializes + parses mcp round-trip', () {
+      const r = RoomInfo(
+        roomId: 'r1',
+        startedAt: 100,
+        mcp: ['exa'],
+      );
+      expect(RoomInfo.fromJson(r.toJson()), r);
+    });
+
     test('RoomInfo serializes + parses model round-trip', () {
       const r = RoomInfo(
         roomId: 'r1',

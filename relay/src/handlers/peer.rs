@@ -110,6 +110,15 @@ async fn handle_peer(socket: WebSocket, peer_addr: SocketAddr, state: AppState) 
             .and_then(|m| m.get("working"))
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        let mcp = room_meta_val
+            .and_then(|m| m.get("mcp"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty());
         let started_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -121,6 +130,7 @@ async fn handle_peer(socket: WebSocket, peer_addr: SocketAddr, state: AppState) 
             model,
             thinking,
             working,
+            mcp,
             started_at,
         }
     };
@@ -283,10 +293,20 @@ async fn handle_peer(socket: WebSocket, peer_addr: SocketAddr, state: AppState) 
                                     let working_patch = meta_obj
                                         .and_then(|m| m.get("working"))
                                         .and_then(|v| v.as_bool());
+                                    let mcp_patch = meta_obj.and_then(|m| m.get("mcp")).and_then(
+                                        |v| {
+                                            v.as_array().map(|arr| {
+                                                arr.iter()
+                                                    .filter_map(|x| x.as_str().map(String::from))
+                                                    .collect::<Vec<_>>()
+                                            })
+                                        },
+                                    );
                                     let patch = RoomMetaPatch {
                                         model: model_patch,
                                         thinking: thinking_patch,
                                         working: working_patch,
+                                        mcp: mcp_patch,
                                     };
                                     if !registry
                                         .update_room_meta(&peer_id, &target_room, patch)

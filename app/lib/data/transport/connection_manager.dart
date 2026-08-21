@@ -650,6 +650,7 @@ class ConnectionManager extends Service {
         :final model,
         :final thinking,
         :final working,
+        :final mcp,
       ):
         final key = toStandardB64(peer);
         final list = _roomsByPeer[key] ?? <RoomInfo>[];
@@ -667,11 +668,13 @@ class ConnectionManager extends Service {
         // relay that omits it (null) keeps the cached value instead of
         // forcing the room back to idle.
         var preservedWorking = false;
+        List<String> preservedMcp = const [];
         final existingIdx = list.indexWhere((r) => r.roomId == roomId);
         if (existingIdx >= 0) {
           preservedName = list[existingIdx].name;
           preservedThinking = list[existingIdx].thinking;
           preservedWorking = list[existingIdx].working;
+          preservedMcp = list[existingIdx].mcp;
         }
         final next = RoomInfo(
           roomId: roomId,
@@ -681,6 +684,7 @@ class ConnectionManager extends Service {
           model: model,
           thinking: thinking ?? preservedThinking,
           working: working ?? preservedWorking,
+          mcp: (mcp != null && mcp.isNotEmpty) ? mcp : preservedMcp,
         );
         final liveAlready = _liveRoomIds[key]?.contains(roomId) ?? false;
         final identicalEntry = existingIdx >= 0 && list[existingIdx] == next;
@@ -719,6 +723,7 @@ class ConnectionManager extends Service {
         :final model,
         :final thinking,
         :final working,
+        :final mcp,
         :final hasModel,
         :final hasThinking,
       ):
@@ -741,15 +746,18 @@ class ConnectionManager extends Service {
         // non-null sets it. This is what carries the relay's
         // turn_start/turn_end broadcast to the Home dot for EVERY room.
         final nextWorking = working ?? current.working;
+        final nextMcp = mcp ?? current.mcp;
         if (current.model == nextModel &&
             current.thinking == nextThinking &&
-            current.working == nextWorking) {
+            current.working == nextWorking &&
+            _mcpEq(current.mcp, nextMcp)) {
           break; // dedup: nothing actually changed
         }
         list[idx] = current.copyWith(
           model: nextModel,
           thinking: nextThinking,
           working: nextWorking,
+          mcp: nextMcp,
         );
         roomsDirty = true;
         // ignore: unawaited_futures
@@ -778,6 +786,7 @@ class ConnectionManager extends Service {
             // `rooms_of` reads the current registry meta, so its
             // `working` reflects the latest turn_start/turn_end.
             working: r.working,
+            mcp: r.mcp.isNotEmpty ? r.mcp : (byId[r.roomId]?.mcp ?? const []),
           );
         }
         final newList = byId.values.toList();
@@ -843,6 +852,15 @@ class ConnectionManager extends Service {
       return a.sinceTs == b.sinceTs;
     }
     // PresenceUnknown has no fields — same type ⇒ equal.
+    return true;
+  }
+
+  bool _mcpEq(List<String> a, List<String> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
     return true;
   }
 
@@ -949,6 +967,7 @@ class ConnectionManager extends Service {
               cwd: c.cwd,
               startedAt: c.startedAt,
               model: c.model,
+              mcp: c.mcp,
             ),
           )
           .toList();
@@ -989,6 +1008,7 @@ class ConnectionManager extends Service {
             startedAt: r.startedAt,
             localName: localById[r.roomId],
             model: r.model,
+            mcp: r.mcp,
           ),
         )
         .toList();

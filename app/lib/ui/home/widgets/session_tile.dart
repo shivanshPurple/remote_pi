@@ -27,7 +27,7 @@ class SessionTile extends StatelessWidget {
   /// Always `false` on phone (no persistent selection there).
   final bool isSelected;
   /// Finished turns that landed while another chat was open. >0 renders
-  /// an accent pill between the title block and the presence dot.
+  /// an accent dot in the left gutter.
   final int unreadCount;
   /// Plan-17 follow-up — long-press context menu. Caller wires the
   /// dialog (rename + delete-offline). Optional; when null the tile
@@ -67,20 +67,24 @@ class SessionTile extends StatelessWidget {
           ),
           child: Padding(
             // Trim the left inset by the 3px accent bar so content stays
-            // aligned whether selected or not.
-            padding: EdgeInsets.fromLTRB(isSelected ? 15 : 18, 14, 18, 14),
+            // aligned whether selected or not. Unread is a small accent
+            // dot in the left gutter (not a count pill).
+            padding: EdgeInsets.fromLTRB(isSelected ? 8 : 10, 14, 18, 14),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                SizedBox(
+                  width: 8,
+                  child: unreadCount > 0
+                      ? const _UnreadDot()
+                      : null,
+                ),
+                const SizedBox(width: 8),
                 _Avatar(name: _avatarName()),
                 const SizedBox(width: 14),
                 Expanded(
                   child: _TitleBlock(peer: peer, room: room),
                 ),
-                if (unreadCount > 0) ...[
-                  _UnreadBadge(count: unreadCount),
-                  const SizedBox(width: 8),
-                ],
                 _PresenceDot(
                   isLive: isLive,
                   isReconnecting: isReconnecting,
@@ -109,29 +113,17 @@ class SessionTile extends StatelessWidget {
   }
 }
 
-class _UnreadBadge extends StatelessWidget {
-  final int count;
-  const _UnreadBadge({required this.count});
+class _UnreadDot extends StatelessWidget {
+  const _UnreadDot();
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      width: 8,
+      height: 8,
       decoration: BoxDecoration(
-        color: colors.accent,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      constraints: const BoxConstraints(minWidth: 18),
-      child: Text(
-        count > 9 ? '9+' : '$count',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: colors.onAccent,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          fontFamily: kMonoFamily,
-        ),
+        shape: BoxShape.circle,
+        color: context.colors.accent,
       ),
     );
   }
@@ -233,7 +225,51 @@ class _TitleBlock extends StatelessWidget {
             ),
           );
         }),
+        if (r != null && r.mcp.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          _McpChips(names: r.mcp),
+        ],
       ],
+    );
+  }
+}
+
+class _McpChips extends StatelessWidget {
+  final List<String> names;
+  const _McpChips({required this.names});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final shown = names.take(3).toList();
+    final extra = names.length - shown.length;
+    return Wrap(
+      spacing: 4,
+      runSpacing: 4,
+      children: [
+        for (final n in shown) _chip(colors, n),
+        if (extra > 0) _chip(colors, '+$extra'),
+      ],
+    );
+  }
+
+  Widget _chip(AppColors colors, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: colors.border),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: colors.muted2,
+          fontSize: 10,
+          fontFamily: kMonoFamily,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
     );
   }
 }

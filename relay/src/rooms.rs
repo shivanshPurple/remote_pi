@@ -25,6 +25,11 @@ pub struct RoomMeta {
     /// auto-clears. Defaults to `false` until the Pi reports otherwise, and is
     /// always serialized so subscribers can rely on its presence.
     pub working: bool,
+    /// Names of MCP servers configured on this Pi session. None = not
+    /// reported yet (legacy Pi / empty). Empty vec is not used — we skip
+    /// serializing when absent so older subscribers ignore the field.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp: Option<Vec<String>>,
     pub started_at: i64,
 }
 
@@ -44,6 +49,9 @@ pub struct RoomMetaPatch {
     /// `None` = field absent (leave current), `Some(b)` = set to `b`. There is
     /// no "clear to null" — `false` *is* the cleared state.
     pub working: Option<bool>,
+    /// `None` = field absent (leave current), `Some(v)` = set (empty vec
+    /// clears the list).
+    pub mcp: Option<Vec<String>>,
 }
 
 impl RoomMetaPatch {
@@ -51,7 +59,10 @@ impl RoomMetaPatch {
     /// otherwise). Used by the registry to skip work when callers send empty
     /// `meta: {}`.
     pub fn is_empty(&self) -> bool {
-        self.model.is_none() && self.thinking.is_none() && self.working.is_none()
+        self.model.is_none()
+            && self.thinking.is_none()
+            && self.working.is_none()
+            && self.mcp.is_none()
     }
 }
 

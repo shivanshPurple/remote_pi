@@ -123,6 +123,7 @@ import {
   isWebSocketScheme,
   toWebSocketUrl,
 } from "./config.js";
+import { listConfiguredMcp } from "./mcp/configured.js";
 import { Box, Container, Image, Text } from "@earendil-works/pi-tui";
 
 // ── State machine ─────────────────────────────────────────────────────────────
@@ -226,7 +227,7 @@ let _myRoomId: string | null = null;   // this Pi's room id (derived from cwd)
 // open instead of starting null. The SDK fires `thinking_level_select`
 // on every change (initial load + user toggle), mirrored to room_meta
 // the same way model is — apps subscribe to one channel for both.
-let _myRoomMeta: { name: string; cwd: string; model?: string; thinking?: ThinkingLevel; working?: boolean } | null = null;
+let _myRoomMeta: { name: string; cwd: string; model?: string; thinking?: ThinkingLevel; working?: boolean; mcp?: string[] } | null = null;
 let _currentModel: string | undefined = undefined;  // last-known model name
 let _currentThinking: ThinkingLevel | undefined = undefined;  // last-known thinking level
 
@@ -3035,10 +3036,12 @@ async function _cmdStart(ctx: Pick<ExtensionContext, "ui" | "cwd">): Promise<voi
     _currentThinking = _pi?.getThinkingLevel() as ThinkingLevel | undefined;
   } catch { /* defensive — never block /remote-pi start on this */ }
 
-  const roomMeta: { name: string; cwd: string; model?: string; thinking?: ThinkingLevel } = { name: sessionName, cwd };
+  const roomMeta: { name: string; cwd: string; model?: string; thinking?: ThinkingLevel; mcp?: string[] } = { name: sessionName, cwd };
   const modelName = _currentModelName();
   if (modelName) roomMeta.model = modelName;
   if (_currentThinking) roomMeta.thinking = _currentThinking;
+  const mcp = listConfiguredMcp(cwd);
+  if (mcp.length) roomMeta.mcp = mcp;
   // Persist so _attemptReconnect can replay the same hello payload — without
   // this, reconnect issues a bare hello and the relay creates a "default room"
   // entry that surfaces in the app as a phantom legacy session.

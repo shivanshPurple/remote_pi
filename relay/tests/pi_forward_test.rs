@@ -70,6 +70,7 @@ fn test_room_meta() -> RoomMeta {
         model: None,
         thinking: None,
         working: false,
+        mcp: None,
         started_at: 0,
     }
 }

@@ -33,13 +33,17 @@ export interface RoomMeta {
   /** Friendly model name (e.g. "claude-sonnet-4.5"). Optional — pi-ext sends
    *  when `ExtensionContext.model` is available; relay/app tolerate absence. */
   model?: string;
+  thinking?: string;
+  working?: boolean;
+  /** MCP server names configured for this session (e.g. `["exa"]`). */
+  mcp?: string[];
 }
 
 /** Control frame sent to relay (not routed to app peer). */
 export interface RoomMetaUpdateFrame {
   type: "room_meta_update";
   room_id: string;
-  meta: { model?: string };
+  meta: { model?: string; thinking?: string; working?: boolean; mcp?: string[] };
 }
 
 export interface ConnectOptions {
