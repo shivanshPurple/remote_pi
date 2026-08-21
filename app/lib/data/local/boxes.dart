@@ -16,6 +16,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 const String _kNamespace = 'rp_v2';
 const String _kSessionsIndex = 'sessions_index';
+const String _kRoomActivity = 'room_activity';
 const String _kRuntime = 'runtime';
 
 /// Facade over the v2 Hive boxes. A single instance is shared by the
@@ -80,6 +81,12 @@ class LocalBoxes {
       await Hive.openBox<dynamic>(_kSessionsIndex);
     }
     try {
+      await Hive.openBox<dynamic>(_kRoomActivity);
+    } catch (_) {
+      _cleanStaleLocks();
+      await Hive.openBox<dynamic>(_kRoomActivity);
+    }
+    try {
       final runtime = await Hive.openBox<dynamic>(_kRuntime);
       await runtime.clear(); // VOLATILE — zero on boot (#3)
     } catch (_) {
@@ -90,6 +97,10 @@ class LocalBoxes {
   }
 
   Box<dynamic> sessionsIndexBox() => Hive.box<dynamic>(_kSessionsIndex);
+
+  /// Durable per-room activity (last opened, unread count) backing the
+  /// Home tile badge + last-used ordering.
+  Box<dynamic> roomActivityBox() => Hive.box<dynamic>(_kRoomActivity);
 
   Box<dynamic> runtimeBox() => Hive.box<dynamic>(_kRuntime);
 

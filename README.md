@@ -20,6 +20,7 @@ This fork expands on that for developers running Pi on **remote VMs, cloud insta
 - **Context tracking in UI**: Counts prompt cache reads/writes (`cacheRead`) and output tokens so cache hits reflect true usage (e.g. 34.1% / 500k) and shows it in the UI.
 - **Native Windows & Linux builds**: Standalone desktop runners with single-instance mutex and automatic recovery from stale Hive database locks.
 - **Terminal session resume**: Formats the exact command (`cd "<folder>" && pi -c`) directly in session info with one-click copy to continue local/VM sessions in Pi CLI.
+- **Android notifications & fast reconnect**: System alerts when Pi finishes working or needs input while you're in another app, plus an immediate WebSocket reconnect on return instead of a stuck "reconnecting…" banner.
 
 ---
 
@@ -132,6 +133,17 @@ npm install
 npm test
 npm run build
 ```
+
+---
+
+## Changelog
+
+### Unreleased
+
+- **Home revamp**: filter tabs removed — live sessions render flat and cached offline sessions fold under a collapsible "Offline (n)" accordion. Sessions sort last-used-first, with actively-working sessions pinned to the top.
+- **Unread badges**: tiles show a count when Pi finishes a turn in a session you're not looking at; opening the session clears it.
+- **Android notifications** (local): alert when Pi finishes working or needs input while you're in another app.
+- **Fast reconnect on resume**: returning to the app after a long time away now reconnects immediately instead of hanging on "reconnecting…".
 
 ---
 

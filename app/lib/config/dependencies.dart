@@ -8,6 +8,7 @@ import 'package:app/data/mesh/mesh_client.dart';
 import 'package:app/data/notifications/notification_service.dart';
 import 'package:app/data/mesh/mesh_sync_service.dart';
 import 'package:app/data/local/boxes.dart';
+import 'package:app/data/local/room_activity_store.dart';
 import 'package:app/data/preferences/preferences.dart';
 import 'package:app/data/repositories/home_read_repository.dart';
 import 'package:app/data/repositories/session_read_repository.dart';
@@ -136,6 +137,14 @@ Future<void> setupDependencies() async {
     () => ActionsRepository(_injector.get<ConnectionManager>()),
   );
 
+  // Home revamp — per-room activity (last opened / unread) for tile
+  // badges and last-used-first ordering.
+  _injector.addOther<RoomActivityStore>(
+    () => RoomActivityStore(
+      box: _injector.get<LocalBoxes>().roomActivityBox(),
+    ),
+  );
+
   // ViewModels
   _injector.addViewModel<ChatViewModel>(
     () => ChatViewModel(
@@ -152,6 +161,7 @@ Future<void> setupDependencies() async {
       _injector.get<PairingStorage>(),
       _injector.get<Preferences>(),
       _injector.get<ConnectionManager>(),
+      _injector.get<RoomActivityStore>(),
     ),
   );
   _injector.addViewModel<SettingsViewModel>(

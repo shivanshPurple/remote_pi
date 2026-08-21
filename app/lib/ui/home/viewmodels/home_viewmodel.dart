@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app/data/local/room_activity_store.dart';
 import 'package:app/data/preferences/preferences.dart';
 import 'package:app/data/transport/connection_manager.dart';
 import 'package:app/data/transport/epk_encoding.dart';
@@ -19,17 +20,36 @@ import 'package:app/ui/home/states/home_state.dart';
 ///     in real time
 ///   - writes [Preferences.selectedRoom] when the user taps a tile so
 ///     `/chat` knows which (peer, room) to address
+///
+/// Home revamp — the old All/Online/Offline tabs are gone. The page now
+/// renders [liveItems] flat and folds [offlineItems] under an accordion;
+/// both lists are ordered last-used-first (recency of open), with rooms
+/// whose agent is mid-turn pinned to the very top. Finished turns that
+/// landed while another chat was open bump the tile's unread badge via
+/// [RoomActivityStore].
 class HomeViewModel extends ViewModel<HomeState> {
   final PairingStorage _storage;
   final Preferences _prefs;
   final ConnectionManager _conn;
+  final RoomActivityStore _activity;
   StreamSubscription<Map<String, PresenceState>>? _presenceSub;
   StreamSubscription<Map<String, List<RoomInfo>>>? _roomsSub;
   StreamSubscription<ConnectionStatus>? _statusSub;
   bool _relayConnected = false;
   bool _disposed = false;
 
-  HomeViewModel(this._storage, this._prefs, this._conn)
+  /// Whether the "Offline (n)" accordion on Home is unfolded.
+  bool get offlineExpanded {
+    final s = state;
+    return s is HomeList ? s.offlineExpanded : false;
+  }
+
+  /// Previous meta.working per `stdEpk|roomId` — lets us detect the
+  /// true→false transition that means "a turn finished".
+  final Map<String, bool> _prevWorking = <String, bool>{};
+  bool _workingSeeded = false;
+
+  HomeViewModel(this._storage, this._prefs, this._conn, this._activity)
     : super(const HomeLoading()) {
     _relayConnected = _conn.status is StatusOnline;
     _load();
@@ -40,11 +60,18 @@ class HomeViewModel extends ViewModel<HomeState> {
     // PairingStorage; listening here keeps Home in sync without manual
     // notifications between screens.
     _storage.addListener(_onStorageChanged);
+    _activity.addListener(_onActivityChanged);
   }
 
   void _onStorageChanged() {
     if (_disposed) return;
     _load();
+  }
+
+  void _onActivityChanged() {
+    if (_disposed) return;
+    // Unread counts / recency changed → re-render tiles.
+    _reemit();
   }
 
   /// `true` when the app's WS to the relay is alive (StatusOnline).
@@ -96,9 +123,36 @@ class HomeViewModel extends ViewModel<HomeState> {
   }
 
   void _onRooms(Map<String, List<RoomInfo>> snapshot) {
+    _detectUnread(snapshot);
     final s = state;
     if (s is! HomeList) return;
     emit(s.copyWith(roomsByPeer: snapshot));
+  }
+
+  /// Compares each room's meta.working against the previous snapshot.
+  /// A true→false transition for a room OTHER than the one currently
+  /// open in chat means a turn finished unseen → bump its unread badge.
+  /// The first snapshot only seeds the map (no bumps on boot).
+  void _detectUnread(Map<String, List<RoomInfo>> snapshot) {
+    final selEpk = _prefs.selectedPeerEpk;
+    final selRoom = _prefs.selectedRoomId ?? 'main';
+    snapshot.forEach((stdEpk, rooms) {
+      for (final r in rooms) {
+        final key = '$stdEpk|${r.roomId}';
+        final prev = _prevWorking[key];
+        _prevWorking[key] = r.working;
+        if (!_workingSeeded || prev != true || r.working) continue;
+        final isOpen =
+            selEpk != null &&
+            toStandardB64(selEpk) == stdEpk &&
+            selRoom == r.roomId;
+        if (!isOpen) {
+          // ignore: discarded_futures
+          _activity.bumpUnread(stdEpk, r.roomId);
+        }
+      }
+    });
+    _workingSeeded = true;
   }
 
   void _onStatus(ConnectionStatus status) {
@@ -107,63 +161,88 @@ class HomeViewModel extends ViewModel<HomeState> {
     _relayConnected = next;
     // Trigger a re-render of any HomeList so tiles re-evaluate dot
     // colour (room-live vs reconnecting).
+    _reemit();
+  }
+
+  /// Re-emit the current HomeList so `context.watch` rebuilds even though
+  /// peers / rooms / presence didn't change.
+  void _reemit() {
     final s = state;
     if (s is HomeList) {
-      // emit a duplicate-looking HomeList so context.watch() triggers
-      // even though peers / roomsByPeer / presence didn't change.
-      // Preserve `filter` — otherwise a status flip would silently reset
-      // the user's tab back to the Online default (and, because the new
-      // object would then differ, actually fire that reset).
       emit(
         HomeList(
           peers: s.peers,
           statusByEpk: s.statusByEpk,
           roomsByPeer: s.roomsByPeer,
-          filter: s.filter,
+          offlineExpanded: s.offlineExpanded,
         ),
       );
     }
   }
 
-  /// Plan-38 Fase 3 — switch the presence tab. No reload: it only swaps the
-  /// `filter` in state so [visibleItems] re-derives. No-op when the state
-  /// isn't a list or the filter is unchanged.
-  void setFilter(HomeFilter filter) {
+  // ---------------------------------------------------------------------------
+  // Derived lists (live / offline, last-used-first ordering)
+  // ---------------------------------------------------------------------------
+
+  List<HomeItem> _allItems() {
     final s = state;
-    if (s is! HomeList) return;
-    if (s.filter == filter) return;
-    emit(s.copyWith(filter: filter));
+    if (s is! HomeList) return const [];
+    return s.items(normalizeEpk: normalizeEpkForLookup);
   }
 
-  /// `true` when `(epk, roomId)` is live on the relay AND the relay itself
-  /// is reachable. The single source of truth for the Online/Offline split.
-  /// [ConnectionManager.isRoomLive] is already gated on `StatusOnline`, so
-  /// the `_relayConnected &&` is belt-and-suspenders that also documents
-  /// intent: "online" requires a live relay.
   bool _online(HomeItem it) =>
       _relayConnected && _conn.isRoomLive(it.peer.remoteEpk, it.room.roomId);
 
-  /// Plan-38 Fase 3 — the items the current [HomeList.filter] keeps. A pure
-  /// view over `state.items()`; returns `const []` outside a list state.
-  List<HomeItem> get visibleItems {
-    final s = state;
-    if (s is! HomeList) return const [];
-    final all = s.items(normalizeEpk: normalizeEpkForLookup);
-    return switch (s.filter) {
-      HomeFilter.all => all,
-      HomeFilter.online => all.where(_online).toList(),
-      HomeFilter.offline => all.where((i) => !_online(i)).toList(),
-    };
+  /// Sessions live on the relay right now, ordered for display.
+  List<HomeItem> get liveItems =>
+      _ordered(_allItems().where(_online).toList());
+
+  /// Cached sessions whose rooms are no longer announced. Rendered under
+  /// the collapsed "Offline" accordion.
+  List<HomeItem> get offlineItems =>
+      _ordered(_allItems().where((i) => !_online(i)).toList());
+
+  /// Display order: working first (agent mid-turn), then most recently
+  /// opened, then newest session, then label — stable and predictable.
+  List<HomeItem> _ordered(List<HomeItem> items) {
+    int cmp(HomeItem a, HomeItem b) {
+      final wa = _conn.isRoomWorking(a.peer.remoteEpk, a.room.roomId);
+      final wb = _conn.isRoomWorking(b.peer.remoteEpk, b.room.roomId);
+      if (wa != wb) return wa ? -1 : 1;
+
+      final la = _activity.lastOpenedAt(
+        toStandardB64(a.peer.remoteEpk),
+        a.room.roomId,
+      );
+      final lb = _activity.lastOpenedAt(
+        toStandardB64(b.peer.remoteEpk),
+        b.room.roomId,
+      );
+      if (la != null || lb != null) {
+        final ta = la?.millisecondsSinceEpoch ?? -1;
+        final tb = lb?.millisecondsSinceEpoch ?? -1;
+        if (ta != tb) return tb.compareTo(ta); // recent first; never-open last
+      }
+
+      if (a.room.startedAt != b.room.startedAt) {
+        return b.room.startedAt.compareTo(a.room.startedAt);
+      }
+      return a.displayName.toLowerCase().compareTo(
+            b.displayName.toLowerCase(),
+          );
+    }
+
+    return items..sort(cmp);
   }
 
-  /// Plan-38 Fase 3 — per-tab counts for the filter badges. Independent of
-  /// the active tab (each badge always shows its own slice's size).
-  ({int all, int online, int offline}) get counts {
+  /// Unseen finished-turn count for a tile badge.
+  int unreadFor(String epk, String roomId) =>
+      _activity.unread(toStandardB64(epk), roomId);
+
+  void toggleOfflineExpanded() {
     final s = state;
-    if (s is! HomeList) return (all: 0, online: 0, offline: 0);
-    final all = s.items(normalizeEpk: normalizeEpkForLookup);
-    final online = all.where(_online).length;
-    return (all: all.length, online: online, offline: all.length - online);
+    if (s is! HomeList) return;
+    emit(s.copyWith(offlineExpanded: !s.offlineExpanded));
   }
 
   /// Remember which (peer, room) the user picked. Falls back to
@@ -196,6 +275,9 @@ class HomeViewModel extends ViewModel<HomeState> {
     // even if the manager is mid-connect (room is applied on the next
     // send and any active StatusOnline channel).
     _conn.switchRoom(effectiveRoom);
+    // Home bookkeeping: this room is now the freshest AND fully seen.
+    // ignore: discarded_futures
+    _activity.markOpened(toStandardB64(epk), effectiveRoom);
   }
 
   /// Helper for widgets: pass a peer's url-safe epk → returns standard
@@ -223,6 +305,7 @@ class HomeViewModel extends ViewModel<HomeState> {
     _roomsSub?.cancel();
     _statusSub?.cancel();
     _storage.removeListener(_onStorageChanged);
+    _activity.removeListener(_onActivityChanged);
     super.dispose();
   }
 }

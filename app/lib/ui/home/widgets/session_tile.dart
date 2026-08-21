@@ -26,6 +26,9 @@ class SessionTile extends StatelessWidget {
   /// detail pane. Paints the accent left-bar + faint fill from the mock.
   /// Always `false` on phone (no persistent selection there).
   final bool isSelected;
+  /// Finished turns that landed while another chat was open. >0 renders
+  /// an accent pill between the title block and the presence dot.
+  final int unreadCount;
   /// Plan-17 follow-up — long-press context menu. Caller wires the
   /// dialog (rename + delete-offline). Optional; when null the tile
   /// only responds to tap.
@@ -40,6 +43,7 @@ class SessionTile extends StatelessWidget {
     this.isReconnecting = false,
     this.isWorking = false,
     this.isSelected = false,
+    this.unreadCount = 0,
     this.onLongPress,
   });
 
@@ -73,6 +77,10 @@ class SessionTile extends StatelessWidget {
                 Expanded(
                   child: _TitleBlock(peer: peer, room: room),
                 ),
+                if (unreadCount > 0) ...[
+                  _UnreadBadge(count: unreadCount),
+                  const SizedBox(width: 8),
+                ],
                 _PresenceDot(
                   isLive: isLive,
                   isReconnecting: isReconnecting,
@@ -98,6 +106,34 @@ class SessionTile extends StatelessWidget {
     }
     if (peer.nickname?.isNotEmpty == true) return peer.nickname!;
     return peer.sessionName;
+  }
+}
+
+class _UnreadBadge extends StatelessWidget {
+  final int count;
+  const _UnreadBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: colors.accent,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      constraints: const BoxConstraints(minWidth: 18),
+      child: Text(
+        count > 9 ? '9+' : '$count',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: colors.onAccent,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          fontFamily: kMonoFamily,
+        ),
+      ),
+    );
   }
 }
 

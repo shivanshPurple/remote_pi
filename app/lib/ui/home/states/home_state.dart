@@ -6,15 +6,6 @@ sealed class HomeState {
   const HomeState();
 }
 
-/// Plan-38 Fase 3 — which presence slice of the Home list is shown.
-/// Pure view filter over the existing (peer → room) list; the tabs never
-/// reload or regroup data. Default is [online] (see [HomeList.filter]).
-///
-///   - [all]     — every known session (live + cached/offline).
-///   - [online]  — only sessions live on the relay right now.
-///   - [offline] — only cached sessions that aren't live.
-enum HomeFilter { all, online, offline }
-
 class HomeLoading extends HomeState {
   const HomeLoading();
 }
@@ -67,28 +58,28 @@ class HomeList extends HomeState {
   final Map<String, PresenceState> statusByEpk;
   final Map<String, List<RoomInfo>> roomsByPeer;
 
-  /// Plan-38 Fase 3 — the selected presence tab. Part of the immutable
-  /// state (per the `ViewModel<T>` pattern) so the choice is reactive and
-  /// survives presence/rooms/status re-emits. Default [HomeFilter.online].
-  final HomeFilter filter;
+  /// Whether the "Offline (n)" accordion is unfolded. Part of the
+  /// immutable state so toggling it re-emits (value inequality) and
+  /// survives presence/rooms/status re-emits.
+  final bool offlineExpanded;
 
   const HomeList({
     required this.peers,
     this.statusByEpk = const {},
     this.roomsByPeer = const {},
-    this.filter = HomeFilter.online,
+    this.offlineExpanded = false,
   });
 
   HomeList copyWith({
     List<PeerRecord>? peers,
     Map<String, PresenceState>? statusByEpk,
     Map<String, List<RoomInfo>>? roomsByPeer,
-    HomeFilter? filter,
+    bool? offlineExpanded,
   }) => HomeList(
     peers: peers ?? this.peers,
     statusByEpk: statusByEpk ?? this.statusByEpk,
     roomsByPeer: roomsByPeer ?? this.roomsByPeer,
-    filter: filter ?? this.filter,
+    offlineExpanded: offlineExpanded ?? this.offlineExpanded,
   );
 
   /// Flatten to a single ordered list of items: one row per (peer, room).
@@ -149,14 +140,14 @@ class HomeList extends HomeState {
   @override
   bool operator ==(Object other) =>
       other is HomeList &&
-      other.filter == filter &&
+      other.offlineExpanded == offlineExpanded &&
       listEquals(other.peers, peers) &&
       mapEquals(other.statusByEpk, statusByEpk) &&
       mapEquals(other.roomsByPeer, roomsByPeer);
 
   @override
   int get hashCode => Object.hash(
-    filter,
+    offlineExpanded,
     Object.hashAll(peers),
     Object.hashAllUnordered(
       statusByEpk.entries.map((e) => '${e.key}:${e.value.runtimeType}'),

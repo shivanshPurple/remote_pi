@@ -268,58 +268,49 @@ class HomePage extends StatelessWidget {
     HomeViewModel vm,
     HomeList state,
   ) {
-    final counts = vm.counts;
+    final live = vm.liveItems;
+    final offline = vm.offlineItems;
     // Globally empty (paired Pi, no rooms at all): keep the original lonely
-    // state and DON'T show the tabs — there's nothing to filter.
-    if (counts.all == 0) {
+    // state.
+    if (live.isEmpty && offline.isEmpty) {
       return const SliverFillRemaining(
         hasScrollBody: false,
         child: _LonelyEmptyState(),
       );
     }
 
-    // Plan-38 Fase 3 — presence filter at the top of the list. Pure view:
-    // tapping a tab only swaps `state.filter` → `vm.visibleItems` re-derives.
-    final tabs = SliverToBoxAdapter(
-      child: HomeFilterTabs(
-        filter: state.filter,
-        counts: counts,
-        onSelected: vm.setFilter,
-      ),
-    );
-
-    final visible = vm.visibleItems;
-    if (visible.isEmpty) {
-      // Items exist, but none match this tab → per-tab empty state beneath
-      // the tabs (which stay visible so the user can switch back).
-      return SliverMainAxisGroup(
-        slivers: [
-          tabs,
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: HomeFilterEmptyState(filter: state.filter),
-          ),
-        ],
-      );
-    }
-
-    // Build the per-peer groups over the VISIBLE items: each group is
-    // [header, tile, tile, …]. Plan-18 follow-up — always include a header
-    // even when there's a single Mac, per the mock. A peer with no visible
-    // item in this filter contributes no header (the `lastEpk` cursor only
-    // advances on rows we actually render).
+    // Home revamp — no filter tabs. Live sessions render flat; cached
+    // offline sessions fold under an "Offline (n)" accordion at the bottom.
     final children = <Widget>[];
     String? lastEpk;
-    for (final it in visible) {
+    for (final it in live) {
       if (it.peer.remoteEpk != lastEpk) {
         children.add(PeerSectionHeader(peer: it.peer));
         lastEpk = it.peer.remoteEpk;
       }
       children.add(_buildItemRowAt(context, vm, state, it));
     }
+    if (offline.isNotEmpty) {
+      children.add(
+        _OfflineAccordionHeader(
+          count: offline.length,
+          expanded: vm.offlineExpanded,
+          onTap: vm.toggleOfflineExpanded,
+        ),
+      );
+      if (vm.offlineExpanded) {
+        lastEpk = null;
+        for (final it in offline) {
+          if (it.peer.remoteEpk != lastEpk) {
+            children.add(PeerSectionHeader(peer: it.peer));
+            lastEpk = it.peer.remoteEpk;
+          }
+          children.add(_buildItemRowAt(context, vm, state, it));
+        }
+      }
+    }
     return SliverMainAxisGroup(
       slivers: [
-        tabs,
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
           sliver: SliverList(
@@ -362,6 +353,7 @@ class HomePage extends StatelessWidget {
           isWorking: isWorking,
           isSelected: isSelected,
           room: it.room,
+          unreadCount: vm.unreadFor(it.peer.remoteEpk, it.room.roomId),
           onOpen: () => _open(context, vm, it.peer, it.room),
           onLongPress: () => _showSessionMenu(context, vm, it, isLive: isLive),
         ),
@@ -580,6 +572,64 @@ class HomePage extends StatelessWidget {
 }
 
 /// Plan-17 follow-up — soft empty state for paired-but-no-rooms.
+/// Collapsible "Offline (n)" section header for cached sessions.
+class _OfflineAccordionHeader extends StatelessWidget {
+  final int count;
+  final bool expanded;
+  final VoidCallback onTap;
+  const _OfflineAccordionHeader({
+    required this.count,
+    required this.expanded,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Material(
+      color: colors.bg,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 10),
+          child: Row(
+            children: [
+              AnimatedRotation(
+                turns: expanded ? 0.25 : 0,
+                duration: const Duration(milliseconds: 150),
+                child: Icon(
+                  LucideIcons.chevronRight,
+                  size: 14,
+                  color: colors.muted,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Offline',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: colors.muted,
+                  letterSpacing: 1.4,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '($count)',
+                style: TextStyle(
+                  fontFamily: kMonoFamily,
+                  fontSize: 11,
+                  color: colors.muted2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LonelyEmptyState extends StatelessWidget {
   const _LonelyEmptyState();
 
