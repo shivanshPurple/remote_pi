@@ -32,6 +32,14 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# flutter_local_notifications_windows (pulled in by the Android-only
+# notification feature) compiles with the legacy /await +
+# <experimental/coroutine> headers. MSVC's STL ≥ 18.x turns that
+# deprecation into a hard STL1011 error. The plugin has no Windows UI we
+# rely on — define the documented suppression macro so the tree builds
+# until upstream migrates to <coroutine>.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
