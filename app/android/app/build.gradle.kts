@@ -29,6 +29,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications uses java.time etc. on old APIs —
+        // required by its AAR metadata check.
+        coreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -74,6 +77,10 @@ flutter {
 }
 
 dependencies {
+    // Desugar runtime for coreLibraryDesugaringEnabled above (see plan
+    // comment: flutter_local_notifications requires it).
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+
     // 16 KB page-size compliance (Google Play, enforced since Nov 2025).
     // mobile_scanner 5.2.3 pulls ML Kit + CameraX whose prebuilt native libs
     // are only 4 KB-aligned (libbarhopper_v3.so, libimage_processing_util_jni.so),
