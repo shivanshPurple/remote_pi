@@ -18,7 +18,9 @@ import 'package:provider/provider.dart';
 
 void _log(String line) {
   try {
-    final f = File(r'C:\Users\Purple\AppData\Local\Temp\remote_pi_dart.log');
+    final logPath =
+        '${Directory.systemTemp.path}${Platform.pathSeparator}remote_pi_dart.log';
+    final f = File(logPath);
     f.writeAsStringSync('[$DateTime.now()] $line\n', mode: FileMode.append);
   } catch (_) {}
 }

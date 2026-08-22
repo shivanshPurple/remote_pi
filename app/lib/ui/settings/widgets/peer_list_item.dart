@@ -124,6 +124,13 @@ class PeerListItem extends StatelessWidget {
               color: colors.muted2,
               onPressed: onEditNickname,
             ),
+            IconButton(
+              tooltip: 'Revoke pairing',
+              icon: Icon(LucideIcons.trash2, size: 18, color: colors.error),
+              onPressed: () async {
+                await onRevokeRequested();
+              },
+            ),
           ],
         ),
       ),

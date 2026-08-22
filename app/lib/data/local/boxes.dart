@@ -12,7 +12,11 @@
 import 'dart:io';
 
 import 'package:app/data/transport/epk_encoding.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 const String _kNamespace = 'rp_v2';
 const String _kSessionsIndex = 'sessions_index';
@@ -26,17 +30,65 @@ class LocalBoxes {
   static bool _initialized = false;
   static String? _boxPath;
 
+  /// Resolves the base directory for Hive boxes in a resilient, cross-platform manner.
+  static Future<String> resolveBoxDirectory() async {
+    // 1. Check legacy directory first so existing installations keep their data
+    try {
+      final docDir = await getApplicationDocumentsDirectory();
+      final legacyPath = p.join(docDir.path, _kNamespace);
+      final legacyDir = Directory(legacyPath);
+      if (legacyDir.existsSync() && legacyDir.listSync().isNotEmpty) {
+        return legacyPath;
+      }
+    } catch (_) {}
+
+    // 2. Standard location for app databases on desktop / mobile
+    try {
+      final supportDir = await getApplicationSupportDirectory();
+      return p.join(supportDir.path, _kNamespace);
+    } catch (_) {}
+
+    // 3. Fall back to Documents directory if support dir was unavailable
+    try {
+      final docDir = await getApplicationDocumentsDirectory();
+      return p.join(docDir.path, _kNamespace);
+    } catch (_) {}
+
+    // 4. Fall back to standard OS environment paths if path_provider throws (e.g. missing xdg-user-dirs on Arch Linux)
+    final home =
+        Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '.';
+    if (Platform.isLinux || Platform.isMacOS) {
+      final xdgData = Platform.environment['XDG_DATA_HOME'];
+      if (xdgData != null && xdgData.isNotEmpty) {
+        return p.join(xdgData, 'remote_pi', _kNamespace);
+      }
+      return p.join(home, '.local', 'share', 'remote_pi', _kNamespace);
+    } else if (Platform.isWindows) {
+      final localAppData =
+          Platform.environment['LOCALAPPDATA'] ?? Platform.environment['APPDATA'];
+      if (localAppData != null && localAppData.isNotEmpty) {
+        return p.join(localAppData, 'remote_pi', _kNamespace);
+      }
+      return p.join(home, 'AppData', 'Local', 'remote_pi', _kNamespace);
+    }
+
+    return p.join(home, '.remote_pi', _kNamespace);
+  }
+
   /// Open the v2 namespace and the always-on boxes; **wipe `runtime`** before
   /// anything subscribes (#3 / Risk 2). Call once during bootstrap, before
   /// `runApp` and before any read-repo is constructed.
   static Future<void> init() async {
     if (_initialized) return;
-    await Hive.initFlutter(_kNamespace);
-    final userProfile =
-        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
-    if (userProfile != null) {
-      _boxPath =
-          '$userProfile${Platform.pathSeparator}Documents${Platform.pathSeparator}$_kNamespace';
+    WidgetsFlutterBinding.ensureInitialized();
+    if (!kIsWeb) {
+      final targetPath = await resolveBoxDirectory();
+      _boxPath = targetPath;
+      final dir = Directory(targetPath);
+      if (!dir.existsSync()) {
+        dir.createSync(recursive: true);
+      }
+      Hive.init(targetPath);
     }
     _cleanStaleLocks();
     await _openCommon();
@@ -63,10 +115,14 @@ class LocalBoxes {
       final dir = Directory(p);
       if (dir.existsSync()) {
         for (final file in dir.listSync().whereType<File>()) {
-          if (file.path.endsWith('.lock')) {
-            try {
-              file.deleteSync();
-            } catch (_) {}
+          final name = file.uri.pathSegments.last;
+          if (name.endsWith('.lock')) {
+            final boxName = name.substring(0, name.length - 5);
+            if (!Hive.isBoxOpen(boxName)) {
+              try {
+                file.deleteSync();
+              } catch (_) {}
+            }
           }
         }
       }

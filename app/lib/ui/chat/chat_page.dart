@@ -839,7 +839,7 @@ class _CommandRow extends StatefulWidget {
 class _CommandRowState extends State<_CommandRow> {
   bool _copied = false;
 
-  Future<void> _copy(BuildContext context) async {
+  Future<void> _copy() async {
     await Clipboard.setData(ClipboardData(text: widget.command));
     if (!mounted) return;
     setState(() => _copied = true);
@@ -894,7 +894,7 @@ class _CommandRowState extends State<_CommandRow> {
                 ),
                 const SizedBox(width: 8),
                 InkWell(
-                  onTap: () => _copy(context),
+                  onTap: _copy,
                   borderRadius: BorderRadius.circular(4),
                   child: Padding(
                     padding: const EdgeInsets.all(4),

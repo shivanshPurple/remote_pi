@@ -202,10 +202,21 @@ class HomeViewModel extends ViewModel<HomeState> {
   List<HomeItem> get offlineItems =>
       _ordered(_allItems().where((i) => !_online(i)).toList());
 
-  /// Display order: working first (agent mid-turn), then most recently
-  /// opened, then newest session, then label — stable and predictable.
+  /// Display order: grouped by peer, then working first (agent mid-turn),
+  /// then most recently opened, then newest session, then label — stable and predictable.
   List<HomeItem> _ordered(List<HomeItem> items) {
     int cmp(HomeItem a, HomeItem b) {
+      if (a.peer.remoteEpk != b.peer.remoteEpk) {
+        final pa = (a.peer.nickname?.isNotEmpty ?? false)
+            ? a.peer.nickname!
+            : a.peer.sessionName;
+        final pb = (b.peer.nickname?.isNotEmpty ?? false)
+            ? b.peer.nickname!
+            : b.peer.sessionName;
+        final c = pa.toLowerCase().compareTo(pb.toLowerCase());
+        if (c != 0) return c;
+        return a.peer.remoteEpk.compareTo(b.peer.remoteEpk);
+      }
       final wa = _conn.isRoomWorking(a.peer.remoteEpk, a.room.roomId);
       final wb = _conn.isRoomWorking(b.peer.remoteEpk, b.room.roomId);
       if (wa != wb) return wa ? -1 : 1;
