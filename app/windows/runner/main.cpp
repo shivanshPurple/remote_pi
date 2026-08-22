@@ -17,7 +17,10 @@ void Log(const std::string& msg) {
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
-  g_log.open("C:\\Users\\Purple\\AppData\\Local\\Temp\\remote_pi_debug.log", std::ios::out | std::ios::trunc);
+  try {
+    auto temp_path = std::filesystem::temp_directory_path() / "remote_pi_debug.log";
+    g_log.open(temp_path, std::ios::out | std::ios::trunc);
+  } catch (...) {}
   Log("[Runner] wWinMain entered");
 
   HANDLE hMutex = ::CreateMutexW(nullptr, TRUE, L"Local\\RemotePi_SingleInstance_Mutex_App");
