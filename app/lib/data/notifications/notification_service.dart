@@ -53,7 +53,7 @@ class NotificationService extends Service {
       if (Platform.isAndroid) {
         const android = AndroidInitializationSettings('@drawable/ic_stat_remotepi');
         await _plugin.initialize(
-          const InitializationSettings(android: android),
+          settings: const InitializationSettings(android: android),
         );
         final androidPlugin = _plugin
             .resolvePlatformSpecificImplementation<
@@ -132,10 +132,10 @@ class NotificationService extends Service {
     if (!Platform.isAndroid) return;
     try {
       await _plugin.show(
-        id,
-        title,
-        body,
-        const NotificationDetails(
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             _channelName,

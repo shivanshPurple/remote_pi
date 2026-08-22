@@ -32,23 +32,23 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-  lucide_icons_flutter: ^3.1.14+2
+  lucide_icons_flutter: ^3.1.17
   cryptography: ^2.7.0
-  mobile_scanner: ^5.0.0
-  flutter_secure_storage: ^9.0.0
+  mobile_scanner: ^7.4.0
+  flutter_secure_storage: ^11.0.0
   web_socket_channel: ^3.0.1
-  go_router: ^14.0.0
-  pasteboard: ^0.4.0
+  go_router: ^17.5.0
+  pasteboard: ^0.5.0
 
   # State management + DI
-  auto_injector: ^2.0.5
+  auto_injector: ^2.2.0
   provider: ^6.1.2
 
   # Local session cache (per-peer chat history)
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   path: ^1.9.0
-  path_provider: ^2.1.5
+  path_provider: ^2.1.6
 
   # Owner-key sync (plan 23) — Ed25519 keypair persisted in iCloud
   # Keychain / Android Block Store. Local path dep, not pub.dev.
@@ -56,7 +56,7 @@ dependencies:
     path: packages/remote_pi_identity
 
   # Plan 24 — HTTP client for the mesh_versions endpoint on the relay.
-  dio: ^5.7.0
+  dio: ^5.11.0
 
   # Plan 29 — on-device speech-to-text for voice input. Captures the mic
   # and transcribes in-stream (no audio file is ever written); `onDevice`
@@ -65,34 +65,34 @@ dependencies:
 
   # Plan 29 — deep-link to the system app settings when the microphone /
   # speech permission was denied, so the user can re-enable it (#10).
-  app_settings: ^5.1.1
+  app_settings: ^9.0.0
 
   # Plan 30 — image attachments. image_picker uses the system camera +
   # PHPicker/Photo Picker (no gallery permission); flutter_image_compress
   # shrinks to JPEG (≤1568px / q80) on-device before it goes inline.
-  image_picker: ^1.1.0
-  flutter_image_compress: ^2.3.0
+  image_picker: ^1.2.3
+  flutter_image_compress: ^2.5.1
 
   # Plan 32b — render the agent's Markdown replies (GFM + code blocks),
   # optimized for LLM output. `url_launcher` opens links tapped in the
   # rendered markdown in the system browser.
-  gpt_markdown: ^1.1.7
+  gpt_markdown: ^1.1.8
   url_launcher: ^6.3.0
 
   # Theme — brand wordmark font (Inter, the wireframe's RP_SANS). Served at
   # runtime + cached by google_fonts so "Remote Pi" renders identically on
   # iOS and Android without bundling a .ttf. See ui/core/themes/app_typography.
-  google_fonts: ^6.2.1
+  google_fonts: ^8.2.1
 
   # Plan 44 — read the running app version (CFBundleShortVersionString /
   # versionName) so the Android-only in-app update notice can compare it
   # against the release manifest's semver.
-  package_info_plus: ^8.0.0
+  package_info_plus: ^10.2.1
 
   # Android local notifications when Pi finishes a turn or needs input
   # while the app is backgrounded. No FCM — only fires while the Dart
   # isolate is still alive (see NotificationService).
-  flutter_local_notifications: ^19.4.0
+  flutter_local_notifications: ^22.3.0
 
 dev_dependencies:
   flutter_test:
